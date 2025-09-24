@@ -1,0 +1,309 @@
+/* --- START: THEME VARIABLE DEFINITIONS --- */
+:root {
+  --bs-body-bg: #f8f9fa;
+  --bs-body-color: #212529;
+  --bs-card-bg: #ffffff;
+  --bs-card-border-color: rgba(0, 0, 0, 0.175);
+  --sub-navbar-bg: #ffffff;
+  --sub-navbar-border-color: #dee2e6;
+  --sub-navbar-link-color: #6c757d;
+  --sub-navbar-link-hover-color: #0d6efd;
+  --sub-navbar-link-active-color: #0d6efd;
+  --login-card-bg: rgba(255, 255, 255, 0.15);
+  --login-card-border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+[data-bs-theme="dark"] {
+  /* Softer dark background */
+  --bs-body-bg: #212529;
+  --bs-body-color: #e0e0e0;
+  /* Lighter cards for better contrast */
+  --bs-card-bg: #2c3034;
+  --bs-card-border-color: rgba(255, 255, 255, 0.15);
+  --sub-navbar-bg: #1e1e1e;
+  --sub-navbar-border-color: rgba(255, 255, 255, 0.15);
+  --sub-navbar-link-color: #adb5bd;
+  --sub-navbar-link-hover-color: #3da5ff;
+  --sub-navbar-link-active-color: #3da5ff;
+
+  /* Use a solid background for the login card in dark mode for readability */
+  --login-card-bg: var(--bs-card-bg);
+  --login-card-border: 1px solid var(--bs-card-border-color);
+
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.05);
+}
+/* --- END: THEME VARIABLE DEFINITIONS --- */
+
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+main {
+  padding-bottom: 3rem;
+}
+
+/* --- Login Page Styles --- */
+.login-page-background {
+  /* background-image removed */
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+.login-card {
+  background: var(--login-card-bg);
+  /* Glassmorphism effect is kept for light theme */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 1rem;
+  border: var(--login-card-border);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+/* For dark mode, remove the blur to ensure text is readable */
+[data-bs-theme="dark"] .login-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+
+/* --- Secondary Navbar Style --- */
+.sub-navbar {
+  border-bottom: 1px solid var(--sub-navbar-border-color);
+  background-color: var(--sub-navbar-bg) !important;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.sub-navbar .nav-link {
+  color: var(--sub-navbar-link-color);
+  font-weight: 500;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  transition: color 0.2s ease-in-out;
+  border-bottom: 3px solid transparent;
+}
+
+.sub-navbar .nav-link:hover {
+  color: var(--sub-navbar-link-hover-color);
+}
+
+.sub-navbar .nav-link.active {
+  color: var(--sub-navbar-link-active-color);
+  font-weight: 600;
+  border-bottom: 3px solid var(--sub-navbar-link-active-color);
+}
+
+/* --- Dashboard Styles --- */
+.kpi-card {
+  border: none;
+  border-radius: 12px;
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.kpi-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+[data-bs-theme="dark"] .kpi-card:hover {
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+
+/* --- Password Toggle Icon Style --- */
+.password-toggle-btn {
+  opacity: 0.5;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.password-toggle-btn:hover {
+  opacity: 1;
+}
+
+/* --- Attendance Dropdown Status Colors --- */
+.status-dropdown .dropdown-toggle {
+  font-weight: 500;
+  min-width: 180px;
+}
+.status-dropdown .dropdown-toggle.status-Present,
+.status-dropdown .dropdown-toggle.status-Excused-but-Present {
+  background-color: #198754;
+  border-color: #198754;
+  color: white;
+}
+.status-dropdown .dropdown-toggle.status-Absent,
+.status-dropdown .dropdown-toggle.status-Excused {
+  background-color: #dc3545;
+  border-color: #dc3545;
+  color: white;
+}
+
+/* --- Desktop navbar dark mode improvements --- */
+/* Ensure Welcome message is visible in dark mode on desktop */
+[data-bs-theme="dark"] .navbar-dark .navbar-text {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Improve button visibility in dark mode on desktop */
+[data-bs-theme="dark"] .navbar-dark .btn-outline-light {
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+[data-bs-theme="dark"] .navbar-dark .btn-outline-light:hover {
+  color: #000;
+  background-color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.9);
+}
+
+/* --- Modern Mobile Navbar Popup Styles --- */
+@media (max-width: 991.98px) {
+  .navbar {
+    position: relative;
+  }
+
+  .navbar-collapse {
+    position: absolute;
+    top: 100%;
+    left: 10px;
+    right: 10px;
+    z-index: 1050;
+    
+    background: var(--login-card-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: var(--login-card-border);
+    
+    padding: 1rem;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease-in-out;
+    pointer-events: none;
+  }
+  
+  [data-bs-theme="dark"] .navbar-collapse {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+  }
+
+  .navbar-collapse.show {
+    opacity: 1;
+    transform: translateY(10px);
+    pointer-events: auto;
+  }
+
+  .navbar-collapse .nav-link {
+    font-size: 1.1rem;
+    padding: 0.75rem 0.5rem;
+    color: var(--bs-body-color);
+    font-weight: 500;
+  }
+  
+  .navbar.navbar-dark .navbar-collapse .nav-link {
+    color: white;
+  }
+  
+  .navbar-collapse .btn {
+      width: 100%;
+      margin-top: 0.5rem;
+  }
+
+  .navbar-toggler {
+    border: 2px solid transparent;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .navbar-toggler:focus {
+      box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+  }
+
+  .navbar.navbar-dark .navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.75%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+  }
+
+  .sub-navbar.navbar-light .navbar-toggler-icon {
+    background-image: var(--bs-navbar-toggler-icon-bg);
+  }
+
+  /* --- FIXED: Mobile navbar dark mode visibility issues --- */
+  /* Fix for dark mode - make sure Welcome text is visible in mobile dropdown */
+  [data-bs-theme="dark"] .navbar-collapse .navbar-text {
+    color: var(--bs-body-color) !important;
+  }
+  
+  /* Fix for dark mode - make sure Logout button is visible in mobile dropdown */
+  [data-bs-theme="dark"] .navbar-collapse .btn-outline-light {
+    color: var(--bs-body-color) !important;
+    border-color: var(--bs-body-color) !important;
+  }
+  
+  [data-bs-theme="dark"] .navbar-collapse .btn-outline-light:hover {
+    color: var(--bs-card-bg) !important;
+    background-color: var(--bs-body-color) !important;
+    border-color: var(--bs-body-color) !important;
+  }
+
+  /* Fix for light mode visibility in dark navbar's mobile popup */
+  [data-bs-theme="light"] .navbar-dark .navbar-collapse .navbar-text {
+    color: var(--bs-body-color) !important;
+  }
+
+  [data-bs-theme="light"] .navbar-dark .navbar-collapse .btn-outline-light {
+    color: var(--bs-body-color) !important;
+    border-color: var(--bs-body-color) !important;
+  }
+
+  [data-bs-theme="light"] .navbar-dark .navbar-collapse .btn-outline-light:hover {
+    color: var(--bs-body-bg) !important;
+    background-color: var(--bs-body-color) !important;
+  }
+}
+
+/* Custom style to make the profile icon toggle look cleaner */
+.navbar-dark .navbar-toggler {
+    border-color: transparent;
+}
+
+.navbar-dark .navbar-toggler:focus {
+    box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.25);
+}
+
+/* --- Team Management Styles --- */
+.team-member-item .remove-member-btn {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.team-member-item:hover .remove-member-btn {
+  visibility: visible;
+  opacity: 1;
+}
+
+.accordion-button .team-actions {
+  /* Prevents clicks on the action buttons from toggling the accordion */
+  pointer-events: auto;
+}
+
+/* --- Button Animation Styles --- */
+.action-btn {
+  transition: all 0.2s ease-in-out;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+[data-bs-theme="dark"] .action-btn:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}

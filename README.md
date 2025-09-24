@@ -1,70 +1,111 @@
-# Getting Started with Create React App
+# FTC Choir Attendance Portal
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A comprehensive web application designed to manage attendance, teams, and member information for the Fatima Tamil Choir (FTC). This portal provides a seamless experience for both administrators and choir members with role-based access and detailed reporting features.
 
-## Available Scripts
+## ✨ Key Features
 
-In the project directory, you can run:
+-   **Secure Authentication**: User login with email and password, including a "Forgot Password" feature powered by Firebase.
+-   **Role-Based Access Control (RBAC)**: Distinct dashboards and permissions for **Admins** and regular **Choir Members**.
+-   **Interactive Dashboard**: An overview of the choir's performance, including yearly attendance percentages, total activities, and member statistics.
+-   **Efficient Attendance Tracking**:
+    -   Mark attendance for various activities (e.g., Daily Mass, Sunday Practice, Special Events).
+    -   Statuses include Present, Absent, Excused, and Excused but Present.
+    -   Bulk-marking options to quickly set remaining members to 'Present' or 'Absent'.
+-   **Comprehensive Member Management (Admin)**:
+    -   Full CRUD (Create, Read, Update, Delete) functionality for choir members.
+    -   Add new members with automatic account creation in Firebase Authentication.
+-   **Dynamic Team Management (Admin)**:
+    -   Create, delete, and manage teams for different categories (e.g., Sunday Mass, Marriage Mass).
+    -   Easily assign and unassign members to teams.
+-   **In-Depth Reporting**:
+    -   Visualize personal and overall attendance with charts (Doughnut and Bar).
+    -   Filter reports by year and month.
+    -   **Download reports as PDF** for individual members, teams, and specific attendance logs.
+-   **Personalized User Experience**:
+    -   Members can view their own detailed attendance statistics.
+    -   Users can update their personal profile information.
+    -   Secure flow for users to change their login email, complete with re-authentication and email verification.
+-   **Modern UI/UX**:
+    -   Clean, responsive interface built with React Bootstrap.
+    -   **Light/Dark mode theme** toggle for user preference.
+    -   User-friendly notifications for all actions using React Toastify.
 
-### `npm start`
+## 👥 User Roles
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+1.  **Admin**:
+    -   Has full access to all features.
+    -   Can record and edit attendance for all members.
+    -   Manages the choir member list (add, edit, delete).
+    -   Manages teams and member assignments.
+    -   Can view detailed reports for any member.
+    -   Can delete past attendance records.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+2.  **Choir Member**:
+    -   Can view their personal attendance summary and statistics (`My Stats`).
+    -   Can view (but not edit) the full attendance history, member list, and team compositions.
+    -   Can update their own profile information (e.g., phone number, address, marital status).
 
-### `npm test`
+## 🛠️ Technology Stack
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+-   **Frontend**: React.js
+-   **UI Framework**: React Bootstrap
+-   **Routing**: React Router
+-   **State Management**: React Hooks (`useState`, `useEffect`, `useMemo`)
+-   **Charting**: Chart.js with `react-chartjs-2`
+-   **PDF Generation**: jsPDF & jsPDF-AutoTable
+-   **Notifications**: React Toastify
+-   **Backend-as-a-Service (BaaS)**:
+    -   **Firebase Authentication**: For user login and management.
+    -   **Firestore Database**: For storing all application data (members, attendance, teams).
 
-### `npm run build`
+## 🚀 Getting Started
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Follow these instructions to set up and run the project locally.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Prerequisites
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+-   Node.js and npm (or yarn) installed on your machine.
+-   A Firebase project.
 
-### `npm run eject`
+### Installation & Setup
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+1.  **Clone the repository:**
+    ```sh
+    git clone <your-repository-url>
+    cd <repository-folder>
+    ```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+2.  **Install dependencies:**
+    ```sh
+    npm install
+    ```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+3.  **Configure Firebase:**
+    -   Create a project on the [Firebase Console](https://console.firebase.google.com/).
+    -   In your project, go to **Project Settings** > **General** and find your web app's configuration object.
+    -   Open the `src/firebase.js` file in the project.
+    -   Replace the placeholder `firebaseConfig` object with your actual Firebase project credentials.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+    ```javascript
+    // In src/firebase.js
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID",
+      measurementId: "YOUR_MEASUREMENT_ID"
+    };
+    ```
 
-## Learn More
+4.  **Set up Firestore and Authentication:**
+    -   In the Firebase console, enable **Firestore Database** and **Authentication**.
+    -   For Authentication, enable the **Email/Password** sign-in method.
+    -   Manually add the admin user (`fathimatamilchoir@gmail.com` or your preferred admin email) in the Authentication tab so you can log in for the first time.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+5.  **Run the application:**
+    ```sh
+    npm start
+    ```
+    The application will be available at `http://localhost:3000`.

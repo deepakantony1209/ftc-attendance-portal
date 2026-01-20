@@ -37,7 +37,22 @@ function ManageTeams({
         memberDetails: team.members
           .map(id => memberMap.get(id))
           .filter(Boolean)
-          .sort((a, b) => a.name.localeCompare(b.name)),
+          .sort((a, b) => {
+            // 1. Organist Priority
+            if (a.isOrganist && !b.isOrganist) return -1;
+            if (!a.isOrganist && b.isOrganist) return 1;
+
+            // 2. Gender Priority (Female comes before Male)
+            // We treat 'Female' as higher priority than others for this specific sort requirements
+            const isAFemale = a.gender === 'Female';
+            const isBFemale = b.gender === 'Female';
+
+            if (isAFemale && !isBFemale) return -1;
+            if (!isAFemale && isBFemale) return 1;
+
+            // 3. Alphabetical by Name
+            return a.name.localeCompare(b.name);
+          }),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [teams, memberMap]);
@@ -133,26 +148,27 @@ function ManageTeams({
 
     const tableRows = [];
     teamData.forEach(team => {
-        tableRows.push([{
-            content: `${team.name} (${team.memberDetails.length} Members)`,
-            colSpan: 1,
-            styles: { fontStyle: 'bold', fillColor: '#f0f0f0', textColor: '#000' }
-        }]);
-        if (team.memberDetails.length > 0) {
-            team.memberDetails.forEach(member => {
-                tableRows.push([member.name]);
-            });
-        } else {
-            tableRows.push(['- No members in this team -']);
-        }
+      tableRows.push([{
+        content: `${team.name} (${team.memberDetails.length} Members)`,
+        colSpan: 1,
+        styles: { fontStyle: 'bold', fillColor: '#f0f0f0', textColor: '#000' }
+      }]);
+      if (team.memberDetails.length > 0) {
+        team.memberDetails.forEach(member => {
+          const displayName = member.isOrganist ? `${member.name} (Organist)` : member.name;
+          tableRows.push([displayName]);
+        });
+      } else {
+        tableRows.push(['- No members in this team -']);
+      }
     });
 
     autoTable(doc, {
-        head: [[`${title} List`]],
-        body: tableRows,
-        startY: 40,
-        theme: 'grid',
-        headStyles: { fillColor: [13, 110, 253] }
+      head: [[`${title} List`]],
+      body: tableRows,
+      startY: 40,
+      theme: 'grid',
+      headStyles: { fillColor: [13, 110, 253] }
     });
     doc.save(`${title.replace(/\s+/g, '_')}_Report.pdf`);
   };
@@ -182,7 +198,7 @@ function ManageTeams({
               </Button>
             )}
             <Button variant="outline-primary" onClick={handlePdf} className="action-btn">
-                <i className="bi bi-download me-2"></i>Download PDF
+              <i className="bi bi-download me-2"></i>Download PDF
             </Button>
           </Col>
         </Row>
@@ -209,7 +225,7 @@ function ManageTeams({
                 <ListGroup variant="flush">
                   {team.memberDetails.length > 0 ? team.memberDetails.map(member => (
                     <ListGroup.Item key={member.id} className="team-member-item d-flex justify-content-between align-items-center">
-                      {member.name}
+                      <span>{member.name} {member.isOrganist && <span className="text-primary fw-bold ms-1">(Organist)</span>}</span>
                       {!isReadOnly && (
                         <Button variant="link" className="text-danger p-0 remove-member-btn" onClick={() => handleRemoveMember(team, member.id)} title={`Remove ${member.name}`}>
                           <i className="bi bi-x-circle-fill"></i>

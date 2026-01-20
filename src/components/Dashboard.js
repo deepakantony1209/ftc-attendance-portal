@@ -20,7 +20,7 @@ function Dashboard({ attendanceHistory = [], choirMembersList = [], isLoading })
       default: return n + 'th';
     }
   };
-const monthName = new Date(0, selectedMonth).toLocaleString('default', { month: 'long' });
+  const monthName = new Date(0, selectedMonth).toLocaleString('default', { month: 'long' });
 
   // 1) Hooks: all useMemo calls must be before any early return and in fixed order
   const availableYears = useMemo(() => {
@@ -35,14 +35,14 @@ const monthName = new Date(0, selectedMonth).toLocaleString('default', { month: 
   const availableMonths = useMemo(() => {
     const months = new Set();
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    
+
     // First filter by the selected year to get relevant events
     const yearlyEvents = attendanceHistory.filter(event => new Date(event.date).getFullYear() === parseInt(selectedYear));
 
     yearlyEvents.forEach(event => {
       months.add(new Date(event.date).getMonth());
     });
-    
+
     // Sort and map month indices to names
     return Array.from(months).sort((a, b) => a - b).map(monthIndex => ({
       value: monthIndex.toString(),
@@ -65,7 +65,8 @@ const monthName = new Date(0, selectedMonth).toLocaleString('default', { month: 
     if (!choirMembersList || choirMembersList.length === 0) return { upcomingBirthdays: [], upcomingAnniversaries: [] };
 
     const today = new Date();
-    const next30Days = new Date();
+    today.setHours(0, 0, 0, 0);
+    const next30Days = new Date(today);
     next30Days.setDate(today.getDate() + 30);
 
     const birthdays = [];
@@ -121,22 +122,22 @@ const monthName = new Date(0, selectedMonth).toLocaleString('default', { month: 
     return { upcomingBirthdays: birthdays, upcomingAnniversaries: anniversaries };
   }, [choirMembersList]);
 
-const dashboardData = useMemo(() => {
-  // ✅ Always return default data structure instead of null
-  const defaultData = {
-    totalMembers: choirMembersList ? choirMembersList.length : 0,
-    averageAttendance: 0,
-    totalEvents: 0,
-    topPerformers: [],
-    needsAttention: [],
-    sortedMembers: [],
-    menAttendance: 0,
-    womenAttendance: 0,
-  };
+  const dashboardData = useMemo(() => {
+    // ✅ Always return default data structure instead of null
+    const defaultData = {
+      totalMembers: choirMembersList ? choirMembersList.length : 0,
+      averageAttendance: 0,
+      totalEvents: 0,
+      topPerformers: [],
+      needsAttention: [],
+      sortedMembers: [],
+      menAttendance: 0,
+      womenAttendance: 0,
+    };
 
     if (!filteredHistory || filteredHistory.length === 0 || !choirMembersList || choirMembersList.length === 0) {
-    return defaultData; // ✅ Return valid data, not null
-  }
+      return defaultData; // ✅ Return valid data, not null
+    }
 
     const relevantHistory = filteredHistory.filter(event => event.records && event.records.length > 0);
     if (relevantHistory.length === 0 || !choirMembersList || choirMembersList.length === 0) {
@@ -182,7 +183,7 @@ const dashboardData = useMemo(() => {
 
     const men = memberStats.filter(m => m.gender === 'Male');
     const women = memberStats.filter(m => m.gender === 'Female');
-    
+
     const menTotalPoints = men.reduce((sum, m) => sum + m.totalPoints, 0);
     const menTotalMaxPoints = men.reduce((sum, m) => sum + m.totalMaxPoints, 0);
     const menAttendance = menTotalMaxPoints > 0 ? (menTotalPoints / menTotalMaxPoints) * 100 : 0;
@@ -190,7 +191,7 @@ const dashboardData = useMemo(() => {
     const womenTotalPoints = women.reduce((sum, m) => sum + m.totalPoints, 0);
     const womenTotalMaxPoints = women.reduce((sum, m) => sum + m.totalMaxPoints, 0);
     const womenAttendance = womenTotalMaxPoints > 0 ? (womenTotalPoints / womenTotalMaxPoints) * 100 : 0;
-    
+
     const sortedMembers = memberStats.sort((a, b) => b.totalPoints - a.totalPoints);
 
     const topPerformers = sortedMembers.filter(m => m.percentage >= 90).slice(0, 10);
@@ -339,22 +340,22 @@ const dashboardData = useMemo(() => {
       </Row>
 
       <Row className="mb-4">
-          <Col md={6} className="mb-3 mb-md-0">
-              <Card className="text-center h-100 shadow-sm kpi-card border">
-                  <Card.Body>
-                      <h5>Men's Attendance %</h5>
-                      <h2 className="fw-bold">{dashboardData.menAttendance.toFixed(1)}%</h2>
-                  </Card.Body>
-              </Card>
-          </Col>
-          <Col md={6}>
-              <Card className="text-center h-100 shadow-sm kpi-card border">
-                  <Card.Body>
-                      <h5>Women's Attendance %</h5>
-                      <h2 className="fw-bold">{dashboardData.womenAttendance.toFixed(1)}%</h2>
-                  </Card.Body>
-              </Card>
-          </Col>
+        <Col md={6} className="mb-3 mb-md-0">
+          <Card className="text-center h-100 shadow-sm kpi-card border">
+            <Card.Body>
+              <h5>Men's Attendance %</h5>
+              <h2 className="fw-bold">{dashboardData.menAttendance.toFixed(1)}%</h2>
+            </Card.Body>
+          </Card>
+        </Col>
+        <Col md={6}>
+          <Card className="text-center h-100 shadow-sm kpi-card border">
+            <Card.Body>
+              <h5>Women's Attendance %</h5>
+              <h2 className="fw-bold">{dashboardData.womenAttendance.toFixed(1)}%</h2>
+            </Card.Body>
+          </Card>
+        </Col>
       </Row>
 
       <Row className="mb-4">

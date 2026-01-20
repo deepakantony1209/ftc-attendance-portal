@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Button, Row, Col, Alert } from 'react-bootstrap';
-import {toast } from 'react-toastify';
+import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // The form now accepts `onFormSubmit` and `initialData`
 function MemberForm({ onFormSubmit, onCancel, initialData }) {
   const [formData, setFormData] = useState({
     name: '', gender: 'Male', dob: '', phone: '', email: '',
-    anbiyam: '', address: '', maritialStatus: '', weddingDate:''
+    anbiyam: '', address: '', maritialStatus: '', weddingDate: ''
   });
 
   // New state to track if the form has been modified from its initial state
@@ -88,11 +88,11 @@ function MemberForm({ onFormSubmit, onCancel, initialData }) {
       </Row>
       <Form.Group className="mb-3">
         <Form.Label>Email Address</Form.Label>
-        <Form.Control 
-          type="email" 
-          name="email" 
-          value={formData.email} 
-          onChange={handleChange} 
+        <Form.Control
+          type="email"
+          name="email"
+          value={formData.email}
+          onChange={handleChange}
           required
           readOnly={!!initialData} // Make read-only if editing
         />
@@ -115,30 +115,64 @@ function MemberForm({ onFormSubmit, onCancel, initialData }) {
       </Form.Group>
       {/* ... after the Email Form.Group ... */}
 
-<Row>
-  <Col md={6}>
-    <Form.Group className="mb-3">
-      <Form.Label>Marital Status</Form.Label>
-      <Form.Select name="maritalStatus" value={formData.maritalStatus || ''} onChange={handleChange}>
-        <option value="" disabled>Select status...</option>
-        <option value="Single">Single</option>
-        <option value="Married">Married</option>
-      </Form.Select>
-    </Form.Group>
-  </Col>
+      <Row>
+        <Col md={6}>
+          <Form.Group className="mb-3">
+            <Form.Label>Marital Status</Form.Label>
+            <Form.Select name="maritalStatus" value={formData.maritalStatus || ''} onChange={handleChange}>
+              <option value="" disabled>Select status...</option>
+              <option value="Single">Single</option>
+              <option value="Married">Married</option>
+            </Form.Select>
+          </Form.Group>
+        </Col>
 
-  {/* Conditionally render Wedding Date based on Marital Status */}
-  {formData.maritalStatus === 'Married' && (
-    <Col md={6}>
-      <Form.Group className="mb-3">
-        <Form.Label>Wedding Date</Form.Label>
-        <Form.Control type="date" name="weddingDate" value={formData.weddingDate || ''} onChange={handleChange} />
-      </Form.Group>
-    </Col>
-  )}
-</Row>
+        {/* Conditionally render Wedding Date based on Marital Status */}
+        {formData.maritalStatus === 'Married' && (
+          <Col md={6}>
+            <Form.Group className="mb-3">
+              <Form.Label>Wedding Date</Form.Label>
+              <Form.Control type="date" name="weddingDate" value={formData.weddingDate || ''} onChange={handleChange} />
+            </Form.Group>
+          </Col>
+        )}
+      </Row>
 
-{/* ... Anbiyam / Community Form.Group ... */}
+      <Row>
+        <Col md={12}>
+          <Form.Group className="mb-3">
+            <Form.Label>Choir Roles</Form.Label>
+            <div className="d-flex gap-3">
+              <Form.Check
+                type="checkbox"
+                id="isOrganist"
+                label="Organist"
+                name="isOrganist"
+                checked={formData.isOrganist || false}
+                onChange={(e) => setFormData({ ...formData, [e.target.name]: e.target.checked })}
+              />
+              <Form.Check
+                type="checkbox"
+                id="isSoundEngineer"
+                label="Sound Engineer"
+                name="isSoundEngineer"
+                checked={formData.isSoundEngineer || false}
+                onChange={(e) => setFormData({ ...formData, [e.target.name]: e.target.checked })}
+              />
+              <Form.Check
+                type="checkbox"
+                id="isPresentationSpecialist"
+                label="Presentation Specialist"
+                name="isPresentationSpecialist"
+                checked={formData.isPresentationSpecialist || false}
+                onChange={(e) => setFormData({ ...formData, [e.target.name]: e.target.checked })}
+              />
+            </div>
+          </Form.Group>
+        </Col>
+      </Row>
+
+      {/* ... Anbiyam / Community Form.Group ... */}
       <Form.Group className="mb-3">
         <Form.Label>Address</Form.Label>
         <Form.Control as="textarea" rows={2} name="address" value={formData.address} onChange={handleChange} />

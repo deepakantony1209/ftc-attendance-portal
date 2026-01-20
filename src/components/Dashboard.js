@@ -1,12 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Row, Col, Card, Table, Form, Spinner, ListGroup } from 'react-bootstrap';
+import { Row, Col, Card, Table, Form, Spinner, ListGroup, Alert } from 'react-bootstrap';
 import { pointValues, statusMultipliers } from './ScoreLogic';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-function Dashboard({ attendanceHistory = [], choirMembersList = [], isLoading }) {
+function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoading }) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(''); // New state for selected month
 
@@ -228,6 +228,44 @@ function Dashboard({ attendanceHistory = [], choirMembersList = [], isLoading })
 
   // --- END: all hooks above this point ---
 
+  const reminderAlert = useMemo(() => {
+    // Only for admins
+    if (!choirMembersList || !user || user.role !== 'admin') return null;
+
+    const now = new Date();
+    const day = now.getDay(); // 0 is Sunday, 6 is Saturday
+    const hour = now.getHours();
+
+    // Check if Saturday or Sunday
+    const isWeekend = day === 0 || day === 6;
+    // Check if Evening (e.g., after 4 PM)
+    const isEvening = hour >= 21;
+
+    if (isWeekend && isEvening) {
+      // Format today as YYYY-MM-DD to match stored dates
+      // Note: Using local time to match user's perspective
+      const offset = now.getTimezoneOffset();
+      const localDate = new Date(now.getTime() - (offset * 60 * 1000));
+      const todayStr = localDate.toISOString().split('T')[0];
+
+      const hasAttendanceToday = attendanceHistory.some(record => record.date === todayStr);
+
+      if (!hasAttendanceToday) {
+        return (
+          <Alert variant="warning" className="mb-4 shadow-sm border-warning">
+            <Alert.Heading><i className="bi bi-exclamation-triangle-fill me-2"></i>Attendance Reminder</Alert.Heading>
+            <p className="mb-0">
+              It's {day === 6 ? 'Saturday' : 'Sunday'} evening and no attendance has been recorded for today yet.
+              Please remember to mark attendance for {day === 6 ? 'Saturday Practice' : 'Sunday Mass'}.
+            </p>
+          </Alert>
+        );
+      }
+    }
+    return null;
+  }, [user, attendanceHistory, choirMembersList]);
+
+
   if (isLoading) {
     return (
       <div className="text-center my-5">
@@ -286,8 +324,11 @@ function Dashboard({ attendanceHistory = [], choirMembersList = [], isLoading })
     },
   };
 
+
+
   return (
     <>
+      {reminderAlert}
       <h2 className="mb-4">Home</h2>
       <Form className="mb-4">
         <Row className="align-items-center">

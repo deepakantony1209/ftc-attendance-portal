@@ -39,7 +39,7 @@ function AppContent() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  
+
   const [membersLoading, setMembersLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [bulkMarkingMode, setBulkMarkingMode] = useState('none');
@@ -99,9 +99,9 @@ function AppContent() {
       setHistoryLoading(false);
     });
     const teamsUnsubscribe = onSnapshot(collection(db, 'teams'), (snapshot) => {
-          setTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-          setTeamsLoading(false);
-        });
+      setTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setTeamsLoading(false);
+    });
     return () => { membersUnsubscribe(); historyUnsubscribe(); teamsUnsubscribe(); };
   }, [loggedInUser]);
 
@@ -146,13 +146,13 @@ function AppContent() {
     }
   }, [loggedInUser]); // The dependency array ensures this runs when loggedInUser state changes.
   // --- [END OF NEW CODE] ---
-  
+
   useEffect(() => {
     if (recordToEdit) {
       setSelectedDate(recordToEdit.date);
       setSelectedSection(recordToEdit.section);
       setEventName(recordToEdit.eventName || '');
-      const attendanceMap = new Map(recordToEdit.records.map(r => [r.id, {status: r.status, reason: r.reason}]));
+      const attendanceMap = new Map(recordToEdit.records.map(r => [r.id, { status: r.status, reason: r.reason }]));
       setMembersForAttendance(choirMembers.map(member => ({
         ...member,
         status: attendanceMap.get(member.id)?.status || null,
@@ -202,7 +202,7 @@ function AppContent() {
       return false;
     }
   };
-  
+
   const handleEditMember = async (memberData) => {
     const { id, ...dataToUpdate } = memberData;
     const memberDocRef = doc(db, 'choirMembers', id);
@@ -249,7 +249,7 @@ function AppContent() {
       return false;
     }
   };
-  
+
   const handleDeleteTeam = async (teamId, teamName) => {
     try {
       await deleteDoc(doc(db, 'teams', teamId));
@@ -258,7 +258,7 @@ function AppContent() {
       toast.error("Failed to delete team.");
     }
   };
- 
+
   const handleUpdateProfile = async (updatedProfileData) => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
@@ -268,21 +268,21 @@ function AppContent() {
 
     try {
       console.log('Updating profile in Firestore:', updatedProfileData);
-      
+
       const { id, uid, ...dataToUpdate } = updatedProfileData;
       const memberDocRef = doc(db, 'choirMembers', id);
       await updateDoc(memberDocRef, dataToUpdate);
-      
+
       console.log('Firestore update successful');
-      
+
       setLoggedInUser(prevUser => ({ ...prevUser, ...updatedProfileData }));
-      
+
       console.log('Local state updated');
-      
+
       if (!updatedProfileData.email || updatedProfileData.email === currentUser.email) {
         toast.success("Profile updated successfully!");
       }
-      
+
       return true;
     } catch (error) {
       console.error('Profile update error:', error);
@@ -326,7 +326,7 @@ function AppContent() {
       })
     );
   };
-  
+
   const handleReasonChange = (memberId, reason) => {
     setMembersForAttendance(prevMembers =>
       prevMembers.map(member => member.id === memberId ? { ...member, reason } : member)
@@ -352,7 +352,7 @@ function AppContent() {
     } else {
       const statusToSet = newMode === 'present' ? 'Present' : 'Absent';
       setMembersForAttendance(prevMembers =>
-        prevMembers.map(member => 
+        prevMembers.map(member =>
           !member.status ? { ...member, status: statusToSet, reason: '' } : member
         )
       );
@@ -361,9 +361,9 @@ function AppContent() {
   };
   const handleSave = async () => {
     if (!selectedDate || !selectedSection) {
-    toast.warn('Please select a date and a section.');
-    return;
-  }
+      toast.warn('Please select a date and a section.');
+      return;
+    }
     if (specialSectionsRequiringName.includes(selectedSection) && !eventName.trim()) {
       toast.warn('Please enter the name of the event.');
       return;
@@ -406,7 +406,7 @@ function AppContent() {
     <Navbar bg="dark" variant="dark" expand="lg" sticky="top" className="shadow-sm">
       <Container>
         <Navbar.Brand as={Link} to="/">FTC Choir Attendance</Navbar.Brand>
-        
+
         <Button variant="outline-light" onClick={toggleTheme} className="ms-auto me-2" title="Toggle Theme">
           <i className={theme === 'light' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill'}></i>
         </Button>
@@ -448,8 +448,8 @@ function AppContent() {
               <>
                 <Nav.Link as={Link} to="/" eventKey="/"><i className="bi bi-house-door-fill me-2"></i>Home</Nav.Link>
                 <Nav.Link as={Link} to="/my-stats" eventKey="/my-stats"><i className="bi bi-person-vcard me-2"></i>My Summary</Nav.Link>
-                  <Nav.Link as={Link} to="/log" eventKey="/log"><i className="bi bi-list-task me-2"></i>Attendance History</Nav.Link>
-                  <Nav.Link as={Link} to="/teams" eventKey="/teams"><i className="bi bi-collection-fill me-2"></i>Teams</Nav.Link>
+                <Nav.Link as={Link} to="/log" eventKey="/log"><i className="bi bi-list-task me-2"></i>Attendance History</Nav.Link>
+                <Nav.Link as={Link} to="/teams" eventKey="/teams"><i className="bi bi-collection-fill me-2"></i>Teams</Nav.Link>
                 <Nav.Link as={Link} to="/members" eventKey="/members"><i className="bi bi-people-fill me-2"></i>Members list</Nav.Link>
                 <Nav.Link as={Link} to="/profile" eventKey="/profile"><i className="bi bi-person-fill me-2"></i>Profile</Nav.Link>
               </>
@@ -463,7 +463,7 @@ function AppContent() {
   return (
     <>
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} newestOnTop={false} closeOnClick rtl={false} pauseOnFocusLoss draggable pauseOnHover theme="colored" />
-      
+
       {loggedInUser && (
         <>
           <PrimaryNav />
@@ -476,7 +476,7 @@ function AppContent() {
             <Route path="*" element={<Login onLogin={handleLogin} onPasswordReset={handlePasswordReset} />} />
           ) : loggedInUser.role === 'admin' ? (
             <>
-              <Route path="/" element={<Dashboard attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} />} />
+              <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} />} />
               <Route path="/attendance" element={<AttendanceForm members={membersForAttendance} selectedDate={selectedDate} setSelectedDate={setSelectedDate} selectedSection={selectedSection} setSelectedSection={setSelectedSection} attendanceSections={attendanceSections} handleAttendance={handleAttendance} handleReasonChange={handleReasonChange} handleSave={handleSave} eventName={eventName} setEventName={setEventName} specialSections={specialSectionsRequiringName} isEditing={!!recordToEdit} onCancelEdit={handleCancelEdit} handleToggleBulkMarking={handleToggleBulkMarking} handleClearAttendance={handleClearAttendance} bulkMarkingMode={bulkMarkingMode} />} />
               <Route path="/log" element={<AttendanceLog history={attendanceHistory} onDeleteRecord={handleDeleteRecord} onStartEdit={handleStartEdit} isReadOnly={false} isLoading={historyLoading} />} />
               <Route path="/statistics" element={<MemberReport attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} />} />
@@ -486,7 +486,7 @@ function AppContent() {
             </>
           ) : (
             <>
-              <Route path="/" element={<Dashboard attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} />} />
+              <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} />} />
               <Route path="/my-stats" element={<MyStats user={loggedInUser} history={attendanceHistory} />} />
               <Route path="/log" element={<AttendanceLog history={attendanceHistory} isReadOnly={true} isLoading={historyLoading} />} />
               <Route path="/teams" element={<ManageTeams choirMembersList={choirMembers} teams={teams} isReadOnly={true} isLoading={teamsLoading || membersLoading} />} />

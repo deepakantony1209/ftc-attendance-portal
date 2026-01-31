@@ -3,7 +3,7 @@ import { Table, Button, Modal, Card, Form, InputGroup, Row, Col, Pagination, Bad
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = false, isLoading }) {
+function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = false, isLoading, teams = [] }) {
   const [recordToView, setRecordToView] = useState(null);
   const [recordToDelete, setRecordToDelete] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -63,11 +63,11 @@ function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = fals
   const indexOfLastRecord = currentPage * recordsPerPage;
   const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
   const currentRecords = filteredHistory.slice(indexOfFirstRecord, indexOfLastRecord);
-  
+
   const handlePageInputChange = (e) => {
     const pageNum = Number(e.target.value);
     if (pageNum >= 1 && pageNum <= totalPages) {
-        setCurrentPage(pageNum);
+      setCurrentPage(pageNum);
     }
   };
 
@@ -75,14 +75,14 @@ function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = fals
 
   const openDeleteDialog = (record) => setRecordToDelete(record);
   const closeDeleteDialog = () => setRecordToDelete(null);
-  
+
   const confirmDelete = () => {
     if (recordToDelete) {
-        onDeleteRecord(recordToDelete.id);
+      onDeleteRecord(recordToDelete.id);
     }
     closeDeleteDialog();
   };
-  
+
   const downloadSingleRecordPdf = (record) => {
     const doc = new jsPDF();
     const title = `Attendance Report: ${record.section}`;
@@ -115,7 +115,12 @@ function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = fals
     }
   };
 
-    if (isLoading) {
+  const getTeamName = (teamId) => {
+    const team = teams.find(t => t.id === teamId);
+    return team ? team.name : 'Unknown Team';
+  };
+
+  if (isLoading) {
     return (
       <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '60vh' }}>
         <Spinner animation="border" role="status">
@@ -142,7 +147,18 @@ function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = fals
                 return (
                   <tr key={record.id}>
                     <td>{new Date(record.date).toLocaleDateString('en-GB')}</td>
-                    <td>{record.section}{record.eventName && <div className="text-muted small">{record.eventName}</div>}</td>
+                    <td>
+                      {record.section}
+                      {record.eventName && <div className="text-muted small">{record.eventName}</div>}
+                      {record.section === 'Sunday evening mass' && record.scheduledTeamId && (
+                        <div className="mt-1">
+                          <Badge bg="primary" className="me-1">
+                            <i className="bi bi-people-fill me-1"></i>
+                            {getTeamName(record.scheduledTeamId)}
+                          </Badge>
+                        </div>
+                      )}
+                    </td>
                     <td className="text-center">{`${totalPresent} / ${record.records.length}`}</td>
                     <td className="text-center">
                       <Button variant="outline-info" size="sm" className="me-2 mb-1 mb-md-0" onClick={() => setRecordToView(record)}>View</Button>
@@ -183,10 +199,18 @@ function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = fals
             <>
               <h5>{recordToView.section} on {new Date(recordToView.date).toLocaleDateString('en-GB')}</h5>
               {recordToView.eventName && <p className="text-muted">{recordToView.eventName}</p>}
+              {recordToView.section === 'Sunday evening mass' && recordToView.scheduledTeamId && (
+                <div className="mb-3">
+                  <Badge bg="primary" className="me-1">
+                    <i className="bi bi-people-fill me-1"></i>
+                    Scheduled Team: {getTeamName(recordToView.scheduledTeamId)}
+                  </Badge>
+                </div>
+              )}
               <Table striped bordered size="sm">
                 <thead><tr><th>Member Name</th><th className="text-center">Status</th></tr></thead>
                 <tbody>
-                  {recordToView.records.sort((a,b) => a.name.localeCompare(b.name)).map(rec => (
+                  {recordToView.records.sort((a, b) => a.name.localeCompare(b.name)).map(rec => (
                     <tr key={rec.id}>
                       <td>{rec.name}</td>
                       <td className="text-center">

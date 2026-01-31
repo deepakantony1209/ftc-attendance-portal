@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Accordion, Button, Card, Col, Form, InputGroup, ListGroup, Modal, Row, Spinner, Badge } from 'react-bootstrap';
+import { Accordion, Button, Card, Col, Form, InputGroup, ListGroup, Modal, Row, Spinner, Badge, Table } from 'react-bootstrap';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatDateForDisplay } from '../utils/scheduleUtils';
 
 function ManageTeams({
   loggedInUser,
@@ -11,7 +12,10 @@ function ManageTeams({
   onCreateTeam,
   onDeleteTeam,
   isReadOnly = false,
-  isLoading
+  isLoading,
+  sundaySchedule = [],
+  onGenerateSchedule,
+  onUpdateScheduleEntry
 }) {
   // --- STATE MANAGEMENT ---
   const [sundaySearch, setSundaySearch] = useState('');
@@ -21,6 +25,9 @@ function ManageTeams({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showEditScheduleModal, setShowEditScheduleModal] = useState(false);
+  const [scheduleToEdit, setScheduleToEdit] = useState(null);
+  const [selectedTeamForSchedule, setSelectedTeamForSchedule] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
   const [teamToModify, setTeamToModify] = useState(null);
   const [teamTypeToCreate, setTeamTypeToCreate] = useState(null);
@@ -138,6 +145,63 @@ function ManageTeams({
     }
   };
 
+  // --- SCHEDULE MANAGEMENT HANDLERS ---
+  const handleOpenEditScheduleModal = (schedule) => {
+    setScheduleToEdit(schedule);
+    setSelectedTeamForSchedule(schedule.teamId);
+    setShowEditScheduleModal(true);
+  };
+
+  const handleUpdateSchedule = () => {
+    if (scheduleToEdit && selectedTeamForSchedule && onUpdateScheduleEntry) {
+      onUpdateScheduleEntry(scheduleToEdit.date, selectedTeamForSchedule);
+      setShowEditScheduleModal(false);
+      setScheduleToEdit(null);
+      setSelectedTeamForSchedule('');
+    }
+  };
+
+  // Get upcoming schedule (next 6 Sundays)
+  const upcomingSchedule = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return sundaySchedule
+      .filter(s => new Date(s.date) >= today)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(0, 6);
+  }, [sundaySchedule]);
+
+  // Get schedule context for regular users (previous, current, next)
+  const scheduleContext = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const sorted = [...sundaySchedule].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Find index of first future or today schedule
+    const upcomingIndex = sorted.findIndex(s => {
+      const sDate = new Date(s.date);
+      sDate.setHours(0, 0, 0, 0);
+      return sDate >= today;
+    });
+
+    if (upcomingIndex === -1) {
+      // If no upcoming, maybe show the last one as previous?
+      return {
+        previous: sorted.length > 0 ? sorted[sorted.length - 1] : null,
+        current: null,
+        next: null
+      };
+    }
+
+    return {
+      previous: upcomingIndex > 0 ? sorted[upcomingIndex - 1] : null,
+      current: sorted[upcomingIndex],
+      next: sorted[upcomingIndex + 1] || null
+    };
+  }, [sundaySchedule]);
+
   // --- PDF DOWNLOAD FUNCTIONALITY ---
   const handleDownloadPdf = (teamData, title) => {
     const doc = new jsPDF();
@@ -215,8 +279,22 @@ function ManageTeams({
                   </div>
                   {!isReadOnly && (
                     <div className="team-actions d-flex gap-2">
-                      <Button variant="outline-primary" size="sm" className="action-btn" onClick={(e) => { e.stopPropagation(); handleOpenAddModal(team); }}><i className="bi bi-plus-lg me-1"></i>Add</Button>
-                      <Button variant="outline-danger" size="sm" className="action-btn" onClick={(e) => { e.stopPropagation(); setTeamToModify(team); setShowDeleteModal(true); }}><i className="bi bi-trash me-1"></i>Delete Team</Button>
+                      <span
+                        className="btn btn-outline-primary btn-sm action-btn"
+                        onClick={(e) => { e.stopPropagation(); handleOpenAddModal(team); }}
+                        role="button"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <i className="bi bi-plus-lg me-1"></i>Add
+                      </span>
+                      <span
+                        className="btn btn-outline-danger btn-sm action-btn"
+                        onClick={(e) => { e.stopPropagation(); setTeamToModify(team); setShowDeleteModal(true); }}
+                        role="button"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <i className="bi bi-trash me-1"></i>Delete Team
+                      </span>
                     </div>
                   )}
                 </div>
@@ -246,61 +324,225 @@ function ManageTeams({
 
   return (
     <>
+      {/* --- SUNDAY SCHEDULE SECTION --- */}
+      {sundayTeams.length > 0 && (
+        isReadOnly ? (
+          // SIMPLIFIED USER VIEW
+          <Card className="shadow-sm mb-4">
+            <Card.Body className="text-center py-4">
+              {scheduleContext.current ? (
+                <>
+                  {/* Previous Schedule */}
+                  {scheduleContext.previous && (
+                    <div className="text-muted mb-3" style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+                      {formatDateForDisplay(scheduleContext.previous.date)} : {scheduleContext.previous.teamName}
+                    </div>
+                  )}
+
+                  {/* Current/Upcoming Schedule */}
+                  <div className="my-4 p-3 bg-light rounded-3 d-inline-block" style={{ minWidth: '250px' }}>
+                    <i className="bi bi-calendar-event text-primary mb-2 d-block" style={{ fontSize: '2.5rem' }}></i>
+                    <h5 className="text-secondary mb-1">{formatDateForDisplay(scheduleContext.current.date)}</h5>
+                    <h2 className="fw-bold text-primary mb-0">{scheduleContext.current.teamName}</h2>
+                  </div>
+
+                  {/* Next Schedule */}
+                  {scheduleContext.next && (
+                    <div className="text-muted mt-3" style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+                      {formatDateForDisplay(scheduleContext.next.date)} : {scheduleContext.next.teamName}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-muted py-3">
+                  <i className="bi bi-calendar-x fs-2 d-block mb-2"></i>
+                  No upcoming schedule available.
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        ) : (
+          // ADMIN TABLE VIEW
+          <Card className="shadow-sm mb-4">
+            <Card.Header>
+              <Row className="align-items-center g-3">
+                <Col sm={12} md={8}>
+                  <h4 className="mb-0">
+                    <i className="bi bi-calendar-week me-2"></i>
+                    Upcoming Sunday Evening Mass Schedule
+                  </h4>
+                </Col>
+                <Col sm={12} md={4} className="d-flex justify-content-md-end">
+                  {!isReadOnly && onGenerateSchedule && (
+                    <Button
+                      variant="success"
+                      onClick={onGenerateSchedule}
+                      className="action-btn"
+                      title="Generate schedule for next 12 Sundays"
+                    >
+                      <i className="bi bi-arrow-clockwise me-2"></i>
+                      Generate Next 12 Weeks
+                    </Button>
+                  )}
+                </Col>
+              </Row>
+            </Card.Header>
+            <Card.Body>
+              {upcomingSchedule.length > 0 ? (
+                <Table striped bordered hover responsive className="mb-0">
+                  <thead>
+                    <tr>
+                      <th width="30%">Date</th>
+                      <th width="40%">Scheduled Team</th>
+                      {!isReadOnly && onUpdateScheduleEntry && <th width="30%" className="text-center">Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {upcomingSchedule.map((schedule) => (
+                      <tr key={schedule.date}>
+                        <td className="align-middle">
+                          <i className="bi bi-calendar-event me-2 text-primary"></i>
+                          <strong>{formatDateForDisplay(schedule.date)}</strong>
+                        </td>
+                        <td className="align-middle">
+                          <Badge bg="primary" className="py-2 px-3 fs-6">
+                            <i className="bi bi-people-fill me-2"></i>
+                            {schedule.teamName}
+                          </Badge>
+                        </td>
+                        {!isReadOnly && onUpdateScheduleEntry && (
+                          <td className="text-center align-middle">
+                            <Button
+                              variant="outline-secondary"
+                              size="sm"
+                              onClick={() => handleOpenEditScheduleModal(schedule)}
+                            >
+                              <i className="bi bi-pencil me-1"></i>
+                              Change
+                            </Button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              ) : (
+                <div className="text-center text-muted py-4">
+                  <i className="bi bi-calendar-x fs-1 d-block mb-3"></i>
+                  <p className="mb-2"><strong>No schedule available</strong></p>
+                  {!isReadOnly && onGenerateSchedule && (
+                    <p className="mb-0 small">Click "Generate Next 12 Weeks" above to create a rotation schedule.</p>
+                  )}
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        )
+      )}
+
+      {/* --- TEAM SECTIONS --- */}
       {renderTeamSection('Sunday Evening Mass Teams', filteredSundayTeams, sundaySearch, setSundaySearch, sundayActiveKeys, setSundayActiveKeys, 'sunday', () => handleDownloadPdf(sundayTeams, 'Sunday Evening Mass Teams'))}
       <div className="mt-4">
         {renderTeamSection('Marriage Mass Teams', filteredMarriageTeams, marriageSearch, setMarriageSearch, marriageActiveKeys, setMarriageActiveKeys, 'marriage', () => handleDownloadPdf(marriageTeams, 'Marriage Mass Teams'))}
       </div>
 
       {/* --- MODALS (Shared for both sections) --- */}
-      {!isReadOnly && (
-        <>
-          <Modal show={showAddModal} onHide={() => setShowAddModal(false)} centered>
-            <Modal.Header closeButton><Modal.Title>Add Member to {teamToModify?.name}</Modal.Title></Modal.Header>
-            <Modal.Body>
-              <ListGroup style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                {(() => {
-                  const membersToShow = teamToModify?.type === 'sunday' ? unassignedSundayMembers : unassignedMarriageMembers;
-                  if (membersToShow && membersToShow.length > 0) {
-                    return membersToShow.map(member => (
-                      <ListGroup.Item key={member.id} action onClick={() => { handleAddMember(member.id); setShowAddModal(false); }} className="d-flex justify-content-between align-items-center">
-                        {member.name}
-                        <i className="bi bi-plus-circle-fill text-success"></i>
-                      </ListGroup.Item>
-                    ));
-                  } else {
-                    return <ListGroup.Item className="text-muted">All members are already assigned to a team of this type.</ListGroup.Item>;
-                  }
-                })()}
-              </ListGroup>
-            </Modal.Body>
-          </Modal>
-
-          <Modal show={showCreateModal} onHide={() => setShowCreateModal(false)} centered>
-            <Modal.Header closeButton><Modal.Title>Create New {teamTypeToCreate === 'sunday' ? 'Sunday Mass' : 'Marriage Mass'} Team</Modal.Title></Modal.Header>
-            <Form onSubmit={handleCreateTeamSubmit}>
+      {
+        !isReadOnly && (
+          <>
+            <Modal show={showAddModal} onHide={() => setShowAddModal(false)} centered>
+              <Modal.Header closeButton><Modal.Title>Add Member to {teamToModify?.name}</Modal.Title></Modal.Header>
               <Modal.Body>
-                <Form.Group>
-                  <Form.Label>Team Name</Form.Label>
-                  <Form.Control type="text" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="e.g., Team D" required />
-                </Form.Group>
+                <ListGroup style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {(() => {
+                    const membersToShow = teamToModify?.type === 'sunday' ? unassignedSundayMembers : unassignedMarriageMembers;
+                    if (membersToShow && membersToShow.length > 0) {
+                      return membersToShow.map(member => (
+                        <ListGroup.Item key={member.id} action onClick={() => { handleAddMember(member.id); setShowAddModal(false); }} className="d-flex justify-content-between align-items-center">
+                          {member.name}
+                          <i className="bi bi-plus-circle-fill text-success"></i>
+                        </ListGroup.Item>
+                      ));
+                    } else {
+                      return <ListGroup.Item className="text-muted">All members are already assigned to a team of this type.</ListGroup.Item>;
+                    }
+                  })()}
+                </ListGroup>
+              </Modal.Body>
+            </Modal>
+
+            <Modal show={showCreateModal} onHide={() => setShowCreateModal(false)} centered>
+              <Modal.Header closeButton><Modal.Title>Create New {teamTypeToCreate === 'sunday' ? 'Sunday Mass' : 'Marriage Mass'} Team</Modal.Title></Modal.Header>
+              <Form onSubmit={handleCreateTeamSubmit}>
+                <Modal.Body>
+                  <Form.Group>
+                    <Form.Label>Team Name</Form.Label>
+                    <Form.Control type="text" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} placeholder="e.g., Team D" required />
+                  </Form.Group>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Cancel</Button>
+                  <Button variant="primary" type="submit">Create</Button>
+                </Modal.Footer>
+              </Form>
+            </Modal>
+
+            <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered>
+              <Modal.Header closeButton><Modal.Title>Confirm Deletion</Modal.Title></Modal.Header>
+              <Modal.Body>Are you sure you want to permanently delete this team<strong>{teamToModify?.name}</strong>? This action cannot be undone.</Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>Cancel</Button>
+                <Button variant="danger" onClick={handleDeleteTeamConfirm}>Yes, Delete</Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Edit Schedule Modal */}
+            <Modal show={showEditScheduleModal} onHide={() => setShowEditScheduleModal(false)} centered>
+              <Modal.Header closeButton>
+                <Modal.Title>Change Scheduled Team</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {scheduleToEdit && (
+                  <>
+                    <p className="mb-3">
+                      <strong>Date:</strong> {formatDateForDisplay(scheduleToEdit.date)}
+                    </p>
+                    <Form.Group>
+                      <Form.Label><strong>Select Team</strong></Form.Label>
+                      <Form.Select
+                        value={selectedTeamForSchedule}
+                        onChange={(e) => setSelectedTeamForSchedule(e.target.value)}
+                      >
+                        <option value="">-- Select Team --</option>
+                        <option value="all-choir" className="fw-bold text-success">All Choir Members</option>
+                        <option value="na-team" className="fw-bold text-muted">NA (Not Applicable)</option>
+                        <hr />
+                        {sundayTeams.map(team => (
+                          <option key={team.id} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </>
+                )}
               </Modal.Body>
               <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowCreateModal(false)}>Cancel</Button>
-                <Button variant="primary" type="submit">Create</Button>
+                <Button variant="secondary" onClick={() => setShowEditScheduleModal(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleUpdateSchedule}
+                  disabled={!selectedTeamForSchedule}
+                >
+                  Update Schedule
+                </Button>
               </Modal.Footer>
-            </Form>
-          </Modal>
-
-          <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} centered>
-            <Modal.Header closeButton><Modal.Title>Confirm Deletion</Modal.Title></Modal.Header>
-            <Modal.Body>Are you sure you want to permanently delete this team<strong>{teamToModify?.name}</strong>? This action cannot be undone.</Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>Cancel</Button>
-              <Button variant="danger" onClick={handleDeleteTeamConfirm}>Yes, Delete</Button>
-            </Modal.Footer>
-          </Modal>
-        </>
-      )}
+            </Modal>
+          </>
+        )
+      }
     </>
   );
 }

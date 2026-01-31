@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Nav, Navbar, Container, Button, Modal, Spinner } from 'react-bootstrap';
@@ -21,6 +21,7 @@ import MemberReport from './components/MemberReport';
 import MyStats from './components/MyStats';
 import Profile from './components/Profile';
 import ManageTeams from './components/ManageTeams';
+import { generateRotationSchedule, getLastScheduledSunday } from './utils/scheduleUtils';
 import './App.css';
 
 const specialSectionsRequiringName = ['Special mass practice', 'Special mass', 'Others'];
@@ -35,6 +36,7 @@ function AppContent() {
   const [selectedSection, setSelectedSection] = useState('');
   const [teams, setTeams] = useState([]);
   const [eventName, setEventName] = useState('');
+  const [selectedScheduledTeam, setSelectedScheduledTeam] = useState('');
   const [recordToEdit, setRecordToEdit] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const location = useLocation();
@@ -44,6 +46,8 @@ function AppContent() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [bulkMarkingMode, setBulkMarkingMode] = useState('none');
   const [teamsLoading, setTeamsLoading] = useState(true);
+  const [sundaySchedule, setSundaySchedule] = useState([]);
+  const hasRedirectedOnLogin = useRef(false);
 
   // --- Theme Toggle State Management ---
   const [theme, setTheme] = useState(() => {
@@ -63,6 +67,21 @@ function AppContent() {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
   };
   // --- End Theme Toggle ---
+
+  // Redirect non-admin users to MyStats page after login (only once)
+  useEffect(() => {
+    if (loggedInUser && loggedInUser.role === 'user' && location.pathname === '/' && !hasRedirectedOnLogin.current) {
+      hasRedirectedOnLogin.current = true;
+      navigate('/my-stats');
+    }
+  }, [loggedInUser, location.pathname, navigate]);
+
+  // Reset redirect flag when user logs out
+  useEffect(() => {
+    if (!loggedInUser) {
+      hasRedirectedOnLogin.current = false;
+    }
+  }, [loggedInUser]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -102,7 +121,11 @@ function AppContent() {
       setTeams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setTeamsLoading(false);
     });
-    return () => { membersUnsubscribe(); historyUnsubscribe(); teamsUnsubscribe(); };
+    const scheduleUnsubscribe = onSnapshot(collection(db, 'sundaySchedule'), (snapshot) => {
+      const schedules = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setSundaySchedule(schedules);
+    });
+    return () => { membersUnsubscribe(); historyUnsubscribe(); teamsUnsubscribe(); scheduleUnsubscribe(); };
   }, [loggedInUser]);
 
   // --- [NEW CODE] ---
@@ -152,6 +175,7 @@ function AppContent() {
       setSelectedDate(recordToEdit.date);
       setSelectedSection(recordToEdit.section);
       setEventName(recordToEdit.eventName || '');
+      setSelectedScheduledTeam(recordToEdit.scheduledTeamId || '');
       const attendanceMap = new Map(recordToEdit.records.map(r => [r.id, { status: r.status, reason: r.reason }]));
       setMembersForAttendance(choirMembers.map(member => ({
         ...member,
@@ -291,6 +315,149 @@ function AppContent() {
     }
   };
 
+  // --- Sunday Schedule Management Functions ---
+  const handleGenerateSchedule = async () => {
+    const sundayTeams = teams.filter(t => t.type === 'sunday');
+
+    if (sundayTeams.length === 0) {
+      toast.error('No Sunday teams found. Please create Sunday teams first.');
+      return;
+    }
+
+    try {
+      // Get last scheduled Sunday to determine next team
+      const lastScheduledSunday = getLastScheduledSunday(sundaySchedule);
+      let startDate = new Date();
+      let startingTeamIndex = 0;
+
+      if (lastScheduledSunday && sundaySchedule.length > 0) {
+        // Find the team that was last scheduled
+        const lastSchedule = sundaySchedule.find(s => s.date === formatDateForSchedule(lastScheduledSunday));
+        const sortedTeams = [...sundayTeams].sort((a, b) => a.name.localeCompare(b.name));
+
+        if (lastSchedule) {
+          const lastTeamIndex = sortedTeams.findIndex(t => t.id === lastSchedule.teamId);
+          startingTeamIndex = (lastTeamIndex + 1) % sortedTeams.length;
+        }
+
+        // Start from the Sunday after the last scheduled one
+        startDate = new Date(lastScheduledSunday);
+        startDate.setDate(startDate.getDate() + 7);
+      }
+
+      const newSchedule = generateRotationSchedule(sundayTeams, startDate, 12);
+
+      // Apply the rotation starting from the determined index
+      const sortedTeams = [...sundayTeams].sort((a, b) => a.name.localeCompare(b.name));
+      newSchedule.forEach((entry, index) => {
+        const teamIndex = (startingTeamIndex + index) % sortedTeams.length;
+        entry.teamId = sortedTeams[teamIndex].id;
+        entry.teamName = sortedTeams[teamIndex].name;
+      });
+
+      // Save to Firestore
+      for (const entry of newSchedule) {
+        await setDoc(doc(db, 'sundaySchedule', entry.date), entry);
+      }
+
+      toast.success(`Generated schedule for next 12 Sundays!`);
+    } catch (error) {
+      console.error('Error generating schedule:', error);
+      toast.error('Failed to generate schedule.');
+    }
+  };
+
+  const handleUpdateScheduleEntry = async (date, newTeamId) => {
+    // Check for special options (All Choir or NA)
+    if (newTeamId === 'all-choir' || newTeamId === 'na-team') {
+      try {
+        const teamName = newTeamId === 'all-choir' ? 'All Choir Members' : 'NA';
+
+        await setDoc(doc(db, 'sundaySchedule', date), {
+          date,
+          teamId: newTeamId,
+          teamName: teamName,
+          createdBy: 'admin',
+          modifiedAt: new Date()
+        });
+
+        toast.success(`Schedule updated to ${teamName} for ${formatDateForDisplay(date)}`);
+        return; // Do not apply ripple change for special options
+      } catch (error) {
+        console.error('Error updating schedule:', error);
+        toast.error('Failed to update schedule.');
+        return;
+      }
+    }
+
+    const sundayTeams = teams.filter(t => t.type === 'sunday').sort((a, b) => a.name.localeCompare(b.name));
+    const newTeamIndex = sundayTeams.findIndex(t => t.id === newTeamId);
+
+    if (newTeamIndex === -1) {
+      toast.error('Team not found.');
+      return;
+    }
+
+    try {
+      const targetDate = new Date(date);
+      targetDate.setHours(0, 0, 0, 0);
+
+      // Get all schedule entries that are on or after the target date
+      // We rely on the current state 'sundaySchedule' to know which dates exist
+      const futureSchedules = sundaySchedule
+        .filter(s => {
+          const sDate = new Date(s.date);
+          sDate.setHours(0, 0, 0, 0);
+          return sDate >= targetDate;
+        })
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      // Loop through and update them in rotation
+      let currentTeamIndex = newTeamIndex;
+
+      // We'll update them one by one. 
+      // Firestore batch could be used for atomicity but simple loop is fine here for small numbers (<12).
+      for (const entry of futureSchedules) {
+        const team = sundayTeams[currentTeamIndex];
+
+        await setDoc(doc(db, 'sundaySchedule', entry.date), {
+          ...entry,
+          teamId: team.id,
+          teamName: team.name,
+          createdBy: 'admin', // Keep track that this was manual/admin intervention
+          modifiedAt: new Date()
+        });
+
+        // Move to next team for the next iteration
+        currentTeamIndex = (currentTeamIndex + 1) % sundayTeams.length;
+      }
+
+      toast.success(`Schedule updated! Adjusted ${futureSchedules.length} weeks.`);
+    } catch (error) {
+      console.error('Error updating schedule:', error);
+      toast.error('Failed to update schedule.');
+    }
+  };
+
+  // Import formatDateForSchedule and formatDateForDisplay from utils
+  const formatDateForSchedule = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatDateForDisplay = (date) => {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: '2-digit',
+      year: 'numeric'
+    });
+  };
+  // --- End Sunday Schedule Management ---
+
+
   const handleDeleteRecord = async (recordIdToDelete) => {
     await deleteDoc(doc(db, 'attendanceHistory', recordIdToDelete));
     toast.success('Attendance record has been deleted.');
@@ -368,6 +535,10 @@ function AppContent() {
       toast.warn('Please enter the name of the event.');
       return;
     }
+    if (selectedSection === 'Sunday evening mass' && !selectedScheduledTeam) {
+      toast.warn('Please select which team is scheduled for this Sunday evening mass.');
+      return;
+    }
     const markedMembers = membersForAttendance.filter(m => m.status !== null);
     if (markedMembers.length === 0) {
       toast.warn('Please mark at least one member.');
@@ -381,6 +552,7 @@ function AppContent() {
     const recordPayload = {
       date: selectedDate, section: selectedSection,
       eventName: specialSectionsRequiringName.includes(selectedSection) ? eventName.trim() : '',
+      scheduledTeamId: selectedSection === 'Sunday evening mass' ? selectedScheduledTeam : null,
       records: markedMembers.map(({ id, name, status, reason }) => ({ id, name, status, reason })),
     };
     if (recordToEdit) {
@@ -391,6 +563,7 @@ function AppContent() {
     }
     setRecordToEdit(null);
     setEventName('');
+    setSelectedScheduledTeam('');
     setSelectedDate(new Date().toISOString().slice(0, 10));
     setSelectedSection('Daily mass');
   };
@@ -476,20 +649,20 @@ function AppContent() {
             <Route path="*" element={<Login onLogin={handleLogin} onPasswordReset={handlePasswordReset} />} />
           ) : loggedInUser.role === 'admin' ? (
             <>
-              <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} />} />
-              <Route path="/attendance" element={<AttendanceForm members={membersForAttendance} selectedDate={selectedDate} setSelectedDate={setSelectedDate} selectedSection={selectedSection} setSelectedSection={setSelectedSection} attendanceSections={attendanceSections} handleAttendance={handleAttendance} handleReasonChange={handleReasonChange} handleSave={handleSave} eventName={eventName} setEventName={setEventName} specialSections={specialSectionsRequiringName} isEditing={!!recordToEdit} onCancelEdit={handleCancelEdit} handleToggleBulkMarking={handleToggleBulkMarking} handleClearAttendance={handleClearAttendance} bulkMarkingMode={bulkMarkingMode} />} />
-              <Route path="/log" element={<AttendanceLog history={attendanceHistory} onDeleteRecord={handleDeleteRecord} onStartEdit={handleStartEdit} isReadOnly={false} isLoading={historyLoading} />} />
-              <Route path="/statistics" element={<MemberReport attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} />} />
-              <Route path="/teams" element={<ManageTeams loggedInUser={loggedInUser} choirMembersList={choirMembers} teams={teams} onUpdateTeam={handleUpdateTeam} onCreateTeam={handleCreateTeam} onDeleteTeam={handleDeleteTeam} isReadOnly={false} isLoading={teamsLoading || membersLoading} />} />
+              <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} teams={teams} isLoading={historyLoading || membersLoading || teamsLoading} />} />
+              <Route path="/attendance" element={<AttendanceForm members={membersForAttendance} selectedDate={selectedDate} setSelectedDate={setSelectedDate} selectedSection={selectedSection} setSelectedSection={setSelectedSection} attendanceSections={attendanceSections} handleAttendance={handleAttendance} handleReasonChange={handleReasonChange} handleSave={handleSave} eventName={eventName} setEventName={setEventName} specialSections={specialSectionsRequiringName} isEditing={!!recordToEdit} onCancelEdit={handleCancelEdit} handleToggleBulkMarking={handleToggleBulkMarking} handleClearAttendance={handleClearAttendance} bulkMarkingMode={bulkMarkingMode} teams={teams} selectedScheduledTeam={selectedScheduledTeam} setSelectedScheduledTeam={setSelectedScheduledTeam} sundaySchedule={sundaySchedule} />} />
+              <Route path="/log" element={<AttendanceLog history={attendanceHistory} onDeleteRecord={handleDeleteRecord} onStartEdit={handleStartEdit} isReadOnly={false} isLoading={historyLoading} teams={teams} />} />
+              <Route path="/statistics" element={<MemberReport attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} teams={teams} />} />
+              <Route path="/teams" element={<ManageTeams loggedInUser={loggedInUser} choirMembersList={choirMembers} teams={teams} onUpdateTeam={handleUpdateTeam} onCreateTeam={handleCreateTeam} onDeleteTeam={handleDeleteTeam} isReadOnly={false} isLoading={teamsLoading || membersLoading} sundaySchedule={sundaySchedule} onGenerateSchedule={handleGenerateSchedule} onUpdateScheduleEntry={handleUpdateScheduleEntry} />} />
               <Route path="/members" element={<ManageMembers members={choirMembers} onAddMember={handleAddNewMember} onEditMember={handleEditMember} onRemoveMember={handleRemoveMember} isReadOnly={false} isLoading={membersLoading} />} />
               <Route path="*" element={<Navigate to="/" />} />
             </>
           ) : (
             <>
-              <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} />} />
-              <Route path="/my-stats" element={<MyStats user={loggedInUser} history={attendanceHistory} />} />
-              <Route path="/log" element={<AttendanceLog history={attendanceHistory} isReadOnly={true} isLoading={historyLoading} />} />
-              <Route path="/teams" element={<ManageTeams choirMembersList={choirMembers} teams={teams} isReadOnly={true} isLoading={teamsLoading || membersLoading} />} />
+              <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} teams={teams} isLoading={historyLoading || membersLoading || teamsLoading} />} />
+              <Route path="/my-stats" element={<MyStats user={loggedInUser} history={attendanceHistory} teams={teams} />} />
+              <Route path="/log" element={<AttendanceLog history={attendanceHistory} isReadOnly={true} isLoading={historyLoading} teams={teams} />} />
+              <Route path="/teams" element={<ManageTeams choirMembersList={choirMembers} teams={teams} isReadOnly={true} isLoading={teamsLoading || membersLoading} sundaySchedule={sundaySchedule} />} />
               <Route path="/members" element={<ManageMembers members={choirMembers} isReadOnly={true} isLoading={membersLoading} />} />
               <Route path="/profile" element={<Profile user={loggedInUser} onCreateTeam={handleCreateTeam} onDeleteTeam={handleDeleteTeam} onUpdateProfile={handleUpdateProfile} />} />
               <Route path="*" element={<Navigate to="/" />} />

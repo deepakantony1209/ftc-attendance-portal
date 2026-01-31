@@ -6,8 +6,10 @@ function AttendanceForm({
   selectedDate, setSelectedDate, selectedSection, setSelectedSection,
   attendanceSections, handleAttendance, handleReasonChange, handleSave,
   eventName, setEventName, specialSections,
-  isEditing, onCancelEdit, 
-  handleToggleBulkMarking, handleClearAttendance, bulkMarkingMode
+  isEditing, onCancelEdit,
+  handleToggleBulkMarking, handleClearAttendance, bulkMarkingMode,
+  teams, selectedScheduledTeam, setSelectedScheduledTeam,
+  sundaySchedule = []
 }) {
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,6 +56,23 @@ function AttendanceForm({
 
   }, [searchTerm, maleMembers, femaleMembers]);
 
+  // --- AUTO-SELECT TEAM BASED ON SUNDAY SCHEDULE ---
+  useEffect(() => {
+    if (selectedDate && selectedSection === 'Sunday evening mass' && sundaySchedule.length > 0) {
+      const dateObj = new Date(selectedDate);
+
+      // Check if selected date is Sunday (0 = Sunday)
+      if (dateObj.getDay() === 0) {
+        // Find schedule for this date
+        const schedule = sundaySchedule.find(s => s.date === selectedDate);
+
+        if (schedule && schedule.teamId) {
+          setSelectedScheduledTeam(schedule.teamId);
+        }
+      }
+    }
+  }, [selectedDate, selectedSection, sundaySchedule, setSelectedScheduledTeam]);
+
   const renderMemberList = (memberList, gender) => {
     if (memberList.length === 0) {
       return <li className="list-group-item text-muted">No {gender} members found.</li>;
@@ -61,12 +80,12 @@ function AttendanceForm({
     return memberList.map(member => (
       <li key={member.id} className="list-group-item d-flex flex-wrap justify-content-between align-items-center py-3">
         <span className="fw-medium mb-2 mb-md-0">{member.name}</span>
-        <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end" style={{width: '100%', maxWidth: '420px'}}>
+        <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end" style={{ width: '100%', maxWidth: '420px' }}>
           <Form.Select
             value={member.status || ''}
             onChange={(e) => handleAttendance(member.id, e.target.value)}
             className={getDropdownClass(member.status)}
-            style={{minWidth: '180px', flex: 1}}
+            style={{ minWidth: '180px', flex: 1 }}
             disabled={isContentDisabled}
           >
             <option value="" disabled>Mark Attendance</option>
@@ -75,14 +94,14 @@ function AttendanceForm({
             <option value="Excused but Present">Excused but Present</option>
             <option value="Excused">Excused</option>
           </Form.Select>
-          
+
           {(member.status === 'Excused' || member.status === 'Excused but Present') && (
             <Form.Control
               type="text"
               placeholder="Enter the Reason"
               value={member.reason || ''}
               onChange={(e) => handleReasonChange(member.id, e.target.value)}
-              style={{minWidth: '180px', flex: 1}}
+              style={{ minWidth: '180px', flex: 1 }}
               required
               disabled={isContentDisabled}
             />
@@ -128,90 +147,146 @@ function AttendanceForm({
             />
           </Col>
         )}
+
+        {selectedSection === 'Sunday evening mass' && (
+          <Col xs={12} className="mt-3">
+            {/* Show helper message if team was auto-selected */}
+            {selectedScheduledTeam && sundaySchedule.find(s => s.date === selectedDate) && (
+              <div className="alert alert-info py-2 mb-3">
+                <i className="bi bi-info-circle me-2"></i>
+                <small>
+                  Team auto-selected based on rotation schedule. You can change it if needed.
+                </small>
+              </div>
+            )}
+
+            <Form.Label htmlFor="scheduled-team"><strong>Select Scheduled Team</strong></Form.Label>
+            <Form.Select
+              id="scheduled-team"
+              value={selectedScheduledTeam}
+              onChange={(e) => setSelectedScheduledTeam(e.target.value)}
+              required
+              disabled={isSectionDisabled}
+            >
+              <option value="">Select which team is scheduled...</option>
+              {/* Special Options */}
+              <option value="all-choir" className="fw-bold text-success">All Choir Members</option>
+              <option value="na-team" className="fw-bold text-muted">NA (Not Applicable)</option>
+              <option disabled>──────────</option>
+
+              {teams
+                .filter(team => team.type === 'sunday')
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map(team => (
+                  <option key={team.id} value={team.id}>{team.name}</option>
+                ))}
+            </Form.Select>
+
+            {/* Alert for NA selection */}
+            {selectedScheduledTeam === 'na-team' && (
+              <div className="alert alert-warning py-2 mt-2 mb-0">
+                <i className="bi bi-exclamation-triangle me-2"></i>
+                <strong>Note:</strong> Attendance will not be taken into consideration for this date.
+              </div>
+            )}
+
+            {/* Alert for All Choir selection */}
+            {selectedScheduledTeam === 'all-choir' && (
+              <div className="alert alert-success py-2 mt-2 mb-0">
+                <i className="bi bi-people-fill me-2"></i>
+                <strong>Note:</strong> Attendance is open for all choir members.
+              </div>
+            )}
+            <Form.Text className="text-muted">
+              <i className="bi bi-info-circle me-1"></i>
+              Select the team that is scheduled for this mass. Members from other teams can still be marked present if they come as backup.
+            </Form.Text>
+          </Col>
+        )}
       </Row>
 
       <div className={`border-top pt-4 mt-4 ${isContentDisabled ? 'opacity-50' : ''}`}>
         <Row className="align-items-center mb-3">
-            <Col md={6}>
-                <h3 className="mb-0">Record Attendance</h3>
-            </Col>
-            <Col md={6}>
-                <InputGroup>
-                    <InputGroup.Text><i className="bi bi-search"></i></InputGroup.Text>
-                    <Form.Control
-                        type="text"
-                        placeholder="Search for a member..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        disabled={isContentDisabled}
-                    />
-                </InputGroup>
-            </Col>
+          <Col md={6}>
+            <h3 className="mb-0">Record Attendance</h3>
+          </Col>
+          <Col md={6}>
+            <InputGroup>
+              <InputGroup.Text><i className="bi bi-search"></i></InputGroup.Text>
+              <Form.Control
+                type="text"
+                placeholder="Search for a member..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                disabled={isContentDisabled}
+              />
+            </InputGroup>
+          </Col>
         </Row>
-        
+
         {/* MODIFIED: Accordion is now controlled by state */}
         <Accordion activeKey={activeKeys} onSelect={(keys) => setActiveKeys(keys)} alwaysOpen className="mt-3">
-            <Accordion.Item eventKey="0">
-                <Accordion.Header>
-                    Male Members
-                    <Badge bg="secondary" pill className="ms-2">{maleMembers.length}</Badge>
-                </Accordion.Header>
-                <Accordion.Body className="p-0">
-                    <ul className="list-group list-group-flush">
-                        {renderMemberList(maleMembers, 'male')}
-                    </ul>
-                </Accordion.Body>
-            </Accordion.Item>
-            <Accordion.Item eventKey="1">
-                <Accordion.Header>
-                    Female Members
-                    <Badge bg="secondary" pill className="ms-2">{femaleMembers.length}</Badge>
-                </Accordion.Header>
-                <Accordion.Body className="p-0">
-                    <ul className="list-group list-group-flush">
-                        {renderMemberList(femaleMembers, 'female')}
-                    </ul>
-                </Accordion.Body>
-            </Accordion.Item>
+          <Accordion.Item eventKey="0">
+            <Accordion.Header>
+              Male Members
+              <Badge bg="secondary" pill className="ms-2">{maleMembers.length}</Badge>
+            </Accordion.Header>
+            <Accordion.Body className="p-0">
+              <ul className="list-group list-group-flush">
+                {renderMemberList(maleMembers, 'male')}
+              </ul>
+            </Accordion.Body>
+          </Accordion.Item>
+          <Accordion.Item eventKey="1">
+            <Accordion.Header>
+              Female Members
+              <Badge bg="secondary" pill className="ms-2">{femaleMembers.length}</Badge>
+            </Accordion.Header>
+            <Accordion.Body className="p-0">
+              <ul className="list-group list-group-flush">
+                {renderMemberList(femaleMembers, 'female')}
+              </ul>
+            </Accordion.Body>
+          </Accordion.Item>
         </Accordion>
       </div>
 
       <div className="d-grid mt-4 d-md-flex justify-content-between align-items-center">
         <div className={`mb-3 mb-md-0 ${isContentDisabled ? 'opacity-50 pe-none' : ''}`}>
-            <Form.Group className="mb-2">
-                <Form.Check
-                    type="switch"
-                    id="mark-present-switch"
-                    label="Set remaining to 'Present'"
-                    checked={bulkMarkingMode === 'present'}
-                    disabled={bulkMarkingMode === 'absent' || isContentDisabled}
-                    onChange={() => handleToggleBulkMarking('present')}
-                />
-            </Form.Group>
-            <Form.Group>
-                <Form.Check
-                    type="switch"
-                    id="mark-absent-switch"
-                    label="Set remaining to 'Absent'"
-                    checked={bulkMarkingMode === 'absent'}
-                    disabled={bulkMarkingMode === 'present' || isContentDisabled}
-                    onChange={() => handleToggleBulkMarking('absent')}
-                />
-            </Form.Group>
+          <Form.Group className="mb-2">
+            <Form.Check
+              type="switch"
+              id="mark-present-switch"
+              label="Set remaining to 'Present'"
+              checked={bulkMarkingMode === 'present'}
+              disabled={bulkMarkingMode === 'absent' || isContentDisabled}
+              onChange={() => handleToggleBulkMarking('present')}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Check
+              type="switch"
+              id="mark-absent-switch"
+              label="Set remaining to 'Absent'"
+              checked={bulkMarkingMode === 'absent'}
+              disabled={bulkMarkingMode === 'present' || isContentDisabled}
+              onChange={() => handleToggleBulkMarking('absent')}
+            />
+          </Form.Group>
         </div>
-        
+
         <div className="d-flex gap-2">
-            <Button variant="outline-secondary" size="lg" onClick={handleClearAttendance} disabled={isContentDisabled}>
-              Clear All
+          <Button variant="outline-secondary" size="lg" onClick={handleClearAttendance} disabled={isContentDisabled}>
+            Clear All
+          </Button>
+          {isEditing && (
+            <Button variant="secondary" size="lg" onClick={onCancelEdit} disabled={isContentDisabled}>
+              Cancel Changes
             </Button>
-            {isEditing && (
-              <Button variant="secondary" size="lg" onClick={onCancelEdit} disabled={isContentDisabled}>
-                Cancel Changes
-              </Button>
-            )}
-            <Button variant="primary" size="lg" onClick={handleSave} disabled={isContentDisabled}>
-              {isEditing ? 'Update Attendance' : 'Save Attendance'}
-            </Button>
+          )}
+          <Button variant="primary" size="lg" onClick={handleSave} disabled={isContentDisabled}>
+            {isEditing ? 'Update Attendance' : 'Save Attendance'}
+          </Button>
         </div>
       </div>
     </>

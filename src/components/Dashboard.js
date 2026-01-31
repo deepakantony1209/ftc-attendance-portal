@@ -6,7 +6,7 @@ import { Bar } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoading }) {
+function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoading, teams = [] }) {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(''); // New state for selected month
 
@@ -156,15 +156,50 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
     const memberStats = (choirMembersList || []).map(member => {
       let totalPointsAwarded = 0;
       let totalMaxPoints = 0;
+      const excuseCountsByMonth = {}; // Track excuses per month
+
+      // Get user's Sunday team
+      const userSundayTeam = teams ? teams.find(t => t.type === 'sunday' && t.members.includes(member.id)) : null;
 
       relevantHistory.forEach(event => {
         const eventPoints = pointValues[event.section] || 0;
 
         if (eventPoints > 0) {
-          totalMaxPoints += eventPoints;
           const record = event.records ? event.records.find(rec => rec.id === member.id) : null;
-          const status = record ? record.status : 'Absent';
-          const multiplier = statusMultipliers[status] || 0;
+
+          // MATCH MEMBER REPORT LOGIC: If no record, ignore the event
+          if (!record) return;
+
+          // Special handling for Sunday evening mass with team rotation
+          if (event.section === 'Sunday evening mass' && event.scheduledTeamId) {
+            const isMyTeamScheduled = event.scheduledTeamId === userSundayTeam?.id;
+
+            // If it's NOT my team's turn...
+            if (!isMyTeamScheduled) {
+              // ...I only get points if I was present (bonus/backup)
+              if (record.status === 'Present' || record.status === 'Excused but Present') {
+                totalMaxPoints += eventPoints;
+                const multiplier = statusMultipliers[record.status] || 0;
+                totalPointsAwarded += eventPoints * multiplier;
+              }
+              return; // Skip normal processing for this event
+            }
+          }
+
+          // Normal processing (My team scheduled OR other event type)
+          totalMaxPoints += eventPoints;
+
+          let effectiveStatus = record.status;
+          // MATCH MEMBER REPORT LOGIC: Limit excuses to 2 per month
+          if (record.status === 'Excused') {
+            const month = event.date.substring(0, 7); // "YYYY-MM"
+            excuseCountsByMonth[month] = (excuseCountsByMonth[month] || 0) + 1;
+            if (excuseCountsByMonth[month] > 2) {
+              effectiveStatus = 'Absent';
+            }
+          }
+
+          const multiplier = statusMultipliers[effectiveStatus] || 0;
           totalPointsAwarded += eventPoints * multiplier;
         }
       });
@@ -194,8 +229,8 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
 
     const sortedMembers = memberStats.sort((a, b) => b.totalPoints - a.totalPoints);
 
-    const topPerformers = sortedMembers.filter(m => m.percentage >= 90).slice(0, 10);
-    const needsAttention = sortedMembers.filter(m => m.percentage < 70).slice(0, 10);
+    const topPerformers = sortedMembers.filter(m => m.percentage >= 80).slice(0, 10);
+    const needsAttention = sortedMembers.filter(m => m.percentage < 60).slice(0, 10);
 
     return {
       totalMembers: choirMembersList.length,
@@ -207,7 +242,7 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
       menAttendance,
       womenAttendance,
     };
-  }, [filteredHistory, choirMembersList]);
+  }, [filteredHistory, choirMembersList, teams]);
 
   // move this useMemo up so it ALWAYS runs (not after a return)
   const activityCounts = useMemo(() => {
@@ -451,7 +486,7 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
       <Row>
         <Col md={6} className="mb-3 mb-md-0">
           <Card className="h-100 shadow-sm">
-            <Card.Header className="fw-bold">✅ Good Attendance (&gt;90%)</Card.Header>
+            <Card.Header className="fw-bold">✅ Good Attendance (&gt;80%)</Card.Header>
             <Table striped borderless hover size="sm" className="mb-0">
               <tbody>
                 {dashboardData.topPerformers.map(m => <tr key={m.id}><td>{m.name}</td><td className="text-end fw-bold">{m.percentage.toFixed(0)}%</td></tr>)}
@@ -461,7 +496,7 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
         </Col>
         <Col md={6}>
           <Card className="h-100 shadow-sm">
-            <Card.Header className="fw-bold">⚠️ Needs Improvement (&lt;70%)</Card.Header>
+            <Card.Header className="fw-bold">⚠️ Needs Improvement (&lt;60%)</Card.Header>
             <Table striped borderless hover size="sm" className="mb-0">
               <tbody>
                 {dashboardData.needsAttention.map(m => <tr key={m.id}><td>{m.name}</td><td className="text-end fw-bold">{m.percentage.toFixed(0)}%</td></tr>)}

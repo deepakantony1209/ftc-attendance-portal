@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Form, Row, Col, Button, InputGroup, Accordion, Badge } from 'react-bootstrap';
+import PageHeader from './Layout/PageHeader';
+import Button from './UI/Button';
+import Card from './UI/Card';
 
 function AttendanceForm({
   members,
@@ -11,283 +13,261 @@ function AttendanceForm({
   teams, selectedScheduledTeam, setSelectedScheduledTeam,
   sundaySchedule = []
 }) {
-
   const [searchTerm, setSearchTerm] = useState('');
-  // New state to control which accordion panels are open
-  const [activeKeys, setActiveKeys] = useState([]);
+  const [openPanels, setOpenPanels] = useState({ male: false, female: false });
 
-  // --- LOGIC TO CONTROL THE STEP-BY-STEP FORM ---
   const isSectionDisabled = !selectedDate;
   const isContentDisabled = !selectedDate || !selectedSection || (specialSections.includes(selectedSection) && !eventName.trim());
 
-  const getDropdownClass = (status) => {
-    if (status === 'Present' || status === 'Excused but Present') return 'status-present';
-    if (status === 'Absent' || status === 'Excused') return 'status-absent';
-    return 'status-unmarked';
+  const getStatusClasses = (status) => {
+    if (status === 'Present' || status === 'Excused but Present') return 'bg-emerald-600 text-white border-emerald-600';
+    if (status === 'Absent' || status === 'Excused') return 'bg-red-600 text-white border-red-600';
+    return '';
   };
 
   const { maleMembers, femaleMembers } = useMemo(() => {
     const filtered = members.filter(member =>
       member.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
-
-    const male = filtered
-      .filter(m => m.gender === 'Male')
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    const female = filtered
-      .filter(m => m.gender === 'Female')
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    return { maleMembers: male, femaleMembers: female };
+    return {
+      maleMembers: filtered.filter(m => m.gender === 'Male').sort((a, b) => a.name.localeCompare(b.name)),
+      femaleMembers: filtered.filter(m => m.gender === 'Female').sort((a, b) => a.name.localeCompare(b.name)),
+    };
   }, [members, searchTerm]);
 
-  // This effect opens the accordions dynamically based on search results
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setActiveKeys([]); // Close all if search is empty
-      return;
+    if (searchTerm.trim()) {
+      setOpenPanels({ male: maleMembers.length > 0, female: femaleMembers.length > 0 });
     }
+  }, [searchTerm, maleMembers.length, femaleMembers.length]);
 
-    const newActiveKeys = [];
-    if (maleMembers.length > 0) newActiveKeys.push('0'); // Event key for Male panel
-    if (femaleMembers.length > 0) newActiveKeys.push('1'); // Event key for Female panel
-    setActiveKeys(newActiveKeys);
-
-  }, [searchTerm, maleMembers, femaleMembers]);
-
-  // --- AUTO-SELECT TEAM BASED ON SUNDAY SCHEDULE ---
   useEffect(() => {
     if (selectedDate && selectedSection === 'Sunday evening mass' && sundaySchedule.length > 0) {
       const dateObj = new Date(selectedDate);
-
-      // Check if selected date is Sunday (0 = Sunday)
       if (dateObj.getDay() === 0) {
-        // Find schedule for this date
         const schedule = sundaySchedule.find(s => s.date === selectedDate);
-
-        if (schedule && schedule.teamId) {
-          setSelectedScheduledTeam(schedule.teamId);
-        }
+        if (schedule && schedule.teamId) setSelectedScheduledTeam(schedule.teamId);
       }
     }
   }, [selectedDate, selectedSection, sundaySchedule, setSelectedScheduledTeam]);
 
   const renderMemberList = (memberList, gender) => {
     if (memberList.length === 0) {
-      return <li className="list-group-item text-muted">No {gender} members found.</li>;
+      return <div className="p-4 text-center text-slate-400 italic text-sm">No {gender} members found.</div>;
     }
     return memberList.map(member => (
-      <li key={member.id} className="list-group-item d-flex flex-wrap justify-content-between align-items-center py-3">
-        <span className="fw-medium mb-2 mb-md-0">{member.name}</span>
-        <div className="d-flex align-items-center gap-2 flex-wrap justify-content-end" style={{ width: '100%', maxWidth: '420px' }}>
-          <Form.Select
+      <div key={member.id} className="flex flex-wrap md:flex-nowrap items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-slate-700/50 last:border-0 hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+        <div className="flex items-center gap-3 mb-2 md:mb-0">
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${gender === 'male' ? 'bg-sky-500' : 'bg-amber-500'}`}>
+            {member.name.charAt(0)}
+          </div>
+          <div>
+            <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{member.name}</div>
+            {member.role === 'admin' && <span className="text-[10px] font-bold uppercase bg-slate-200 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded">Admin</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap justify-end w-full md:w-auto">
+          <select
             value={member.status || ''}
             onChange={(e) => handleAttendance(member.id, e.target.value)}
-            className={getDropdownClass(member.status)}
-            style={{ minWidth: '180px', flex: 1 }}
             disabled={isContentDisabled}
+            className={`form-select min-w-[160px] w-auto text-sm font-medium ${getStatusClasses(member.status)}`}
           >
             <option value="" disabled>Mark Attendance</option>
             <option value="Present">Present</option>
             <option value="Absent">Absent</option>
             <option value="Excused but Present">Excused but Present</option>
             <option value="Excused">Excused</option>
-          </Form.Select>
-
+          </select>
           {(member.status === 'Excused' || member.status === 'Excused but Present') && (
-            <Form.Control
+            <input
               type="text"
-              placeholder="Enter the Reason"
+              placeholder="Reason..."
               value={member.reason || ''}
               onChange={(e) => handleReasonChange(member.id, e.target.value)}
-              style={{ minWidth: '180px', flex: 1 }}
-              required
               disabled={isContentDisabled}
+              required
+              className="form-input min-w-[180px] w-auto text-sm"
             />
           )}
         </div>
-      </li>
+      </div>
     ));
   };
 
+  const togglePanel = (panel) => {
+    setOpenPanels(prev => ({ ...prev, [panel]: !prev[panel] }));
+  };
 
   return (
     <>
-      <Row className="g-3 mb-4 align-items-end">
-        <Col md={6}>
-          <Form.Label htmlFor="date-picker"><strong>Select Date</strong></Form.Label>
-          <Form.Control
-            type="date" id="date-picker" value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)} required
-          />
-        </Col>
-        <Col md={6}>
-          <Form.Label htmlFor="section-select"><strong>Select Activity Type</strong></Form.Label>
-          <Form.Select
-            id="section-select" value={selectedSection}
-            onChange={(e) => setSelectedSection(e.target.value)} required
-            disabled={isSectionDisabled}
-          >
-            <option value="" disabled>Select an Activity Type</option>
-            {attendanceSections.map(section => (
-              <option key={section} value={section}>{section}</option>
-            ))}
-          </Form.Select>
-        </Col>
+      <PageHeader
+        title={isEditing ? "Edit Attendance" : "Record Attendance"}
+        subtitle={isEditing ? "Modify existing attendance record." : "Log attendance for mass or practice."}
+      />
 
-        {specialSections.includes(selectedSection) && (
-          <Col xs={12} className="mt-3">
-            <Form.Label htmlFor="event-name"><strong>Name of the activity</strong></Form.Label>
-            <Form.Control
-              type="text" id="event-name" value={eventName}
-              onChange={(e) => setEventName(e.target.value)}
-              placeholder="e.g., Easter Vigil, St.Cecili Feast" required
-              disabled={isSectionDisabled}
-            />
-          </Col>
-        )}
-
-        {selectedSection === 'Sunday evening mass' && (
-          <Col xs={12} className="mt-3">
-            {/* Show helper message if team was auto-selected */}
-            {selectedScheduledTeam && sundaySchedule.find(s => s.date === selectedDate) && (
-              <div className="alert alert-info py-2 mb-3">
-                <i className="bi bi-info-circle me-2"></i>
-                <small>
-                  Team auto-selected based on rotation schedule. You can change it if needed.
-                </small>
-              </div>
-            )}
-
-            <Form.Label htmlFor="scheduled-team"><strong>Select Scheduled Team</strong></Form.Label>
-            <Form.Select
-              id="scheduled-team"
-              value={selectedScheduledTeam}
-              onChange={(e) => setSelectedScheduledTeam(e.target.value)}
-              required
-              disabled={isSectionDisabled}
-            >
-              <option value="">Select which team is scheduled...</option>
-              {/* Special Options */}
-              <option value="all-choir" className="fw-bold text-success">All Choir Members</option>
-              <option value="na-team" className="fw-bold text-muted">NA (Not Applicable)</option>
-              <option disabled>──────────</option>
-
-              {teams
-                .filter(team => team.type === 'sunday')
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map(team => (
-                  <option key={team.id} value={team.id}>{team.name}</option>
+      {/* Date & Section Selector */}
+      <Card className="mb-5">
+        <Card.Body>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">Select Date</label>
+              <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} required className="form-input" />
+            </div>
+            <div>
+              <label className="form-label">Activity Type</label>
+              <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} required disabled={isSectionDisabled} className="form-select">
+                <option value="" disabled>Select an Activity Type</option>
+                {attendanceSections.map(section => (
+                  <option key={section} value={section}>{section}</option>
                 ))}
-            </Form.Select>
+              </select>
+            </div>
 
-            {/* Alert for NA selection */}
-            {selectedScheduledTeam === 'na-team' && (
-              <div className="alert alert-warning py-2 mt-2 mb-0">
-                <i className="bi bi-exclamation-triangle me-2"></i>
-                <strong>Note:</strong> Attendance will not be taken into consideration for this date.
+            {specialSections.includes(selectedSection) && (
+              <div className="md:col-span-2">
+                <label className="form-label">Activity Name</label>
+                <input type="text" value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g., Easter Vigil, St. Cecilia Feast" required disabled={isSectionDisabled} className="form-input" />
               </div>
             )}
 
-            {/* Alert for All Choir selection */}
-            {selectedScheduledTeam === 'all-choir' && (
-              <div className="alert alert-success py-2 mt-2 mb-0">
-                <i className="bi bi-people-fill me-2"></i>
-                <strong>Note:</strong> Attendance is open for all choir members.
+            {selectedSection === 'Sunday evening mass' && (
+              <div className="md:col-span-2">
+                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                  {selectedScheduledTeam && sundaySchedule.find(s => s.date === selectedDate) && (
+                    <div className="alert alert-info mb-3">
+                      <i className="bi bi-info-circle"></i> Team auto-selected based on rotation schedule.
+                    </div>
+                  )}
+                  <label className="form-label">Scheduled Team</label>
+                  <select value={selectedScheduledTeam} onChange={(e) => setSelectedScheduledTeam(e.target.value)} required disabled={isSectionDisabled} className="form-select mb-2">
+                    <option value="">Select which team is scheduled...</option>
+                    <option value="all-choir">All Choir Members</option>
+                    <option value="na-team">NA (Not Applicable)</option>
+                    <option disabled>──────────</option>
+                    {teams.filter(team => team.type === 'sunday').sort((a, b) => a.name.localeCompare(b.name)).map(team => (
+                      <option key={team.id} value={team.id}>{team.name}</option>
+                    ))}
+                  </select>
+                  {selectedScheduledTeam === 'na-team' && (
+                    <div className="text-amber-600 dark:text-amber-400 text-sm flex items-center gap-1"><i className="bi bi-exclamation-triangle"></i> Attendance will not count.</div>
+                  )}
+                  {selectedScheduledTeam === 'all-choir' && (
+                    <div className="text-emerald-600 dark:text-emerald-400 text-sm flex items-center gap-1"><i className="bi bi-people-fill"></i> Open for all members.</div>
+                  )}
+                </div>
               </div>
             )}
-            <Form.Text className="text-muted">
-              <i className="bi bi-info-circle me-1"></i>
-              Select the team that is scheduled for this mass. Members from other teams can still be marked present if they come as backup.
-            </Form.Text>
-          </Col>
-        )}
-      </Row>
+          </div>
+        </Card.Body>
+      </Card>
 
-      <div className={`border-top pt-4 mt-4 ${isContentDisabled ? 'opacity-50' : ''}`}>
-        <Row className="align-items-center mb-3">
-          <Col md={6}>
-            <h3 className="mb-0">Record Attendance</h3>
-          </Col>
-          <Col md={6}>
-            <InputGroup>
-              <InputGroup.Text><i className="bi bi-search"></i></InputGroup.Text>
-              <Form.Control
-                type="text"
-                placeholder="Search for a member..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                disabled={isContentDisabled}
-              />
-            </InputGroup>
-          </Col>
-        </Row>
+      {/* Members List */}
+      <div className={isContentDisabled ? 'opacity-50 pointer-events-none' : ''}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h5 className="font-bold text-slate-800 dark:text-white">Members List</h5>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Mark attendance for each member below.</p>
+          </div>
+          <div className="relative w-full sm:w-72">
+            <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input type="text" placeholder="Search member..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} disabled={isContentDisabled} className="form-input pl-10" />
+          </div>
+        </div>
 
-        {/* MODIFIED: Accordion is now controlled by state */}
-        <Accordion activeKey={activeKeys} onSelect={(keys) => setActiveKeys(keys)} alwaysOpen className="mt-3">
-          <Accordion.Item eventKey="0">
-            <Accordion.Header>
-              Male Members
-              <Badge bg="secondary" pill className="ms-2">{maleMembers.length}</Badge>
-            </Accordion.Header>
-            <Accordion.Body className="p-0">
-              <ul className="list-group list-group-flush">
+        {/* Accordion Panels */}
+        <div className="mb-5 nock-card overflow-hidden">
+          {/* Men Panel */}
+          <div className="border-b border-slate-100 dark:border-slate-700/50 last:border-0">
+            <button onClick={() => togglePanel('male')} className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+              <div className="flex items-center gap-2">
+                <i className="bi bi-gender-male text-sky-500 text-lg"></i>
+                <span className="font-bold text-slate-800 dark:text-slate-200">Men</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{maleMembers.length}</span>
+                <i className={`bi bi-chevron-${openPanels.male ? 'up' : 'down'} text-slate-400`}></i>
+              </div>
+            </button>
+            {openPanels.male && (
+              <div className="border-t border-slate-100 dark:border-slate-700/50">
                 {renderMemberList(maleMembers, 'male')}
-              </ul>
-            </Accordion.Body>
-          </Accordion.Item>
-          <Accordion.Item eventKey="1">
-            <Accordion.Header>
-              Female Members
-              <Badge bg="secondary" pill className="ms-2">{femaleMembers.length}</Badge>
-            </Accordion.Header>
-            <Accordion.Body className="p-0">
-              <ul className="list-group list-group-flush">
+              </div>
+            )}
+          </div>
+          {/* Women Panel */}
+          <div>
+            <button onClick={() => togglePanel('female')} className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+              <div className="flex items-center gap-2">
+                <i className="bi bi-gender-female text-amber-500 text-lg"></i>
+                <span className="font-bold text-slate-800 dark:text-slate-200">Women</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{femaleMembers.length}</span>
+                <i className={`bi bi-chevron-${openPanels.female ? 'up' : 'down'} text-slate-400`}></i>
+              </div>
+            </button>
+            {openPanels.female && (
+              <div className="border-t border-slate-100 dark:border-slate-700/50">
                 {renderMemberList(femaleMembers, 'female')}
-              </ul>
-            </Accordion.Body>
-          </Accordion.Item>
-        </Accordion>
-      </div>
-
-      <div className="d-grid mt-4 d-md-flex justify-content-between align-items-center">
-        <div className={`mb-3 mb-md-0 ${isContentDisabled ? 'opacity-50 pe-none' : ''}`}>
-          <Form.Group className="mb-2">
-            <Form.Check
-              type="switch"
-              id="mark-present-switch"
-              label="Set remaining to 'Present'"
-              checked={bulkMarkingMode === 'present'}
-              disabled={bulkMarkingMode === 'absent' || isContentDisabled}
-              onChange={() => handleToggleBulkMarking('present')}
-            />
-          </Form.Group>
-          <Form.Group>
-            <Form.Check
-              type="switch"
-              id="mark-absent-switch"
-              label="Set remaining to 'Absent'"
-              checked={bulkMarkingMode === 'absent'}
-              disabled={bulkMarkingMode === 'present' || isContentDisabled}
-              onChange={() => handleToggleBulkMarking('absent')}
-            />
-          </Form.Group>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="d-flex gap-2">
-          <Button variant="outline-secondary" size="lg" onClick={handleClearAttendance} disabled={isContentDisabled}>
-            Clear All
-          </Button>
-          {isEditing && (
-            <Button variant="secondary" size="lg" onClick={onCancelEdit} disabled={isContentDisabled}>
-              Cancel Changes
-            </Button>
-          )}
-          <Button variant="primary" size="lg" onClick={handleSave} disabled={isContentDisabled}>
-            {isEditing ? 'Update Attendance' : 'Save Attendance'}
-          </Button>
-        </div>
+        {/* Action Bar */}
+        <Card className="shadow-lg bg-slate-900 dark:bg-slate-950 border-slate-700 mb-6">
+          <Card.Body className="p-4">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+                {/* Mark Remaining Present */}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={bulkMarkingMode === 'present'}
+                      disabled={bulkMarkingMode === 'absent' || isContentDisabled}
+                      onChange={() => handleToggleBulkMarking('present')}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-emerald-500 transition-colors"></div>
+                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+                  </div>
+                  <span className="text-sm font-medium text-white">Mark Remaining Present</span>
+                </label>
+
+                {/* Mark Remaining Absent */}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={bulkMarkingMode === 'absent'}
+                      disabled={bulkMarkingMode === 'present' || isContentDisabled}
+                      onChange={() => handleToggleBulkMarking('absent')}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-red-500 transition-colors"></div>
+                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+                  </div>
+                  <span className="text-sm font-medium text-white">Mark Remaining Absent</span>
+                </label>
+              </div>
+
+              <div className="flex gap-2 w-full md:w-auto justify-end">
+                {isEditing && (
+                  <Button variant="secondary" onClick={onCancelEdit} disabled={isContentDisabled}>Cancel</Button>
+                )}
+                <button onClick={handleClearAttendance} disabled={isContentDisabled} className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-500 text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50">
+                  Clear
+                </button>
+                <Button variant="primary" onClick={handleSave} disabled={isContentDisabled}>
+                  {isEditing ? 'Update Changes' : 'Save Attendance'}
+                </Button>
+              </div>
+            </div>
+          </Card.Body>
+        </Card>
+
       </div>
     </>
   );

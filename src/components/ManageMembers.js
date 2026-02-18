@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Table, Button, Modal, Card, ListGroup, Form, InputGroup, Row, Col, Spinner } from 'react-bootstrap';
 import MemberForm from './MemberForm';
 import { toast } from 'react-toastify';
+import PageHeader from './Layout/PageHeader';
+import Button from './UI/Button';
+import Card from './UI/Card';
 
 function ManageMembers({ members, onAddMember, onEditMember, onRemoveMember, isReadOnly = false, isLoading }) {
   const [showModal, setShowModal] = useState(false);
@@ -12,31 +14,16 @@ function ManageMembers({ members, onAddMember, onEditMember, onRemoveMember, isR
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'ascending' });
 
-  const handleShowAddModal = () => {
-    setMemberToEdit(null);
-    setShowModal(true);
-  };
-  
-  const handleShowEditModal = (member) => {
-    setMemberToEdit(member);
-    setShowModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setMemberToEdit(null);
-  };
+  const handleShowAddModal = () => { setMemberToEdit(null); setShowModal(true); };
+  const handleShowEditModal = (member) => { setMemberToEdit(member); setShowModal(true); };
+  const handleCloseModal = () => { setShowModal(false); setMemberToEdit(null); };
 
   const handleFormSubmit = async (memberData) => {
     if (memberToEdit) {
-      // Check if email was changed
       const emailChanged = memberData.email !== memberToEdit.email;
-      
       if (emailChanged) {
-        // Admin is changing a user's email - this requires special handling
         await handleAdminEmailUpdate(memberData);
       } else {
-        // Regular profile update
         await onEditMember({ ...memberData, id: memberToEdit.id });
       }
     } else {
@@ -47,213 +34,263 @@ function ManageMembers({ members, onAddMember, onEditMember, onRemoveMember, isR
 
   const handleAdminEmailUpdate = async (memberData) => {
     try {
-      // First, update the database
       await onEditMember({ ...memberData, id: memberToEdit.id });
-      
-      // Show admin instructions for Firebase Auth update
-      toast.info(
-        `Profile updated in database. Note: The user will need to contact you to update their login email, or you'll need to update it manually in the Firebase Console.`,
-        { autoClose: 8000 }
-      );
-      
-      // Alternative: If you want to try updating auth (requires the user to be signed in)
-      // This won't work for admin updating other users, but keeping for reference
-      /*
-      const currentUser = auth.currentUser;
-      if (currentUser && currentUser.uid === memberToEdit.id) {
-        await updateEmail(currentUser, memberData.email);
-        toast.success(`Email updated in both database and authentication.`);
-      } else {
-        toast.info(`Database updated. Authentication email must be updated separately.`);
-      }
-      */
-      
+      toast.info(`Profile updated. The user needs to update their login email separately.`, { autoClose: 8000 });
     } catch (error) {
       console.error('Admin email update error:', error);
-      toast.error('Failed to update member email. Please try again.');
+      toast.error('Failed to update member email.');
     }
   };
 
-  const openConfirmDialog = (member) => {
-    setMemberToRemove(member);
-    setShowConfirmDialog(true);
-  };
+  const openConfirmDialog = (member) => { setMemberToRemove(member); setShowConfirmDialog(true); };
+  const closeConfirmDialog = () => { setMemberToRemove(null); setShowConfirmDialog(false); };
+  const confirmRemove = () => { if (memberToRemove) onRemoveMember(memberToRemove.id); closeConfirmDialog(); };
+  const handleViewDetails = (member) => setMemberToView(member);
+  const handleCloseDetails = () => setMemberToView(null);
 
-  const closeConfirmDialog = () => {
-    setMemberToRemove(null);
-    setShowConfirmDialog(false);
-  };
-
-  const confirmRemove = () => {
-    if (memberToRemove) {
-      onRemoveMember(memberToRemove.id);
-    }
-    closeConfirmDialog();
-  };
-
-  const handleViewDetails = (member) => {
-    setMemberToView(member);
-  };
-
-  const handleCloseDetails = () => {
-    setMemberToView(null);
-  };
-  
-  const requestSort = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-  
-  const getSortIndicator = (key) => {
-    if (sortConfig.key !== key) return null;
-    return sortConfig.direction === 'ascending' ? <i className="bi bi-arrow-up ms-1"></i> : <i className="bi bi-arrow-down ms-1"></i>;
-  };
-  
   const filteredAndSortedMembers = useMemo(() => {
-    let sortableMembers = [...members];
-    
-    sortableMembers = sortableMembers.filter(member => 
+    let sortableMembers = [...members].filter(member =>
       member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (member.email && member.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (member.phone && member.phone.includes(searchTerm))
     );
-    
     sortableMembers.sort((a, b) => {
       if (sortConfig.key === 'dob') {
-        const dateA = new Date(a.dob);
-        const dateB = new Date(b.dob);
+        const dateA = new Date(a.dob); const dateB = new Date(b.dob);
         return sortConfig.direction === 'ascending' ? dateA - dateB : dateB - dateA;
       }
-      const aValue = a[sortConfig.key] || '';
-      const bValue = b[sortConfig.key] || '';
+      const aValue = a[sortConfig.key] || ''; const bValue = b[sortConfig.key] || '';
       const comparison = aValue.toString().localeCompare(bValue.toString(), undefined, { numeric: true });
-      if (comparison !== 0) {
-        return sortConfig.direction === 'ascending' ? comparison : -comparison;
-      }
-      if (sortConfig.key === 'name') {
-        return new Date(a.dob) - new Date(b.dob);
-      }
-      return 0;
+      return sortConfig.direction === 'ascending' ? comparison : -comparison;
     });
-
     return sortableMembers;
   }, [members, searchTerm, sortConfig]);
 
   if (isLoading) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '60vh' }}>
-        <Spinner animation="border" role="status">
-          <span className="visually-hidden">Loading Members...</span>
-        </Spinner>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="spinner"></div>
       </div>
     );
   }
 
   return (
     <>
-      <Card className="shadow-sm">
-        <Card.Header>
-          <Row className="align-items-center">
-            <Col><h4 className="mb-0">{isReadOnly ? 'Choir Members' : 'Manage Choir Members'} ({filteredAndSortedMembers.length})</h4></Col>
-          </Row>
-          <Row className="mt-3">
-            <Col md={8} lg={9}>
-              <InputGroup>
-                <Form.Control
-                  placeholder="Search by name, email, or phone..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </InputGroup>
-            </Col>
-            <Col md={4} lg={3} className="d-grid d-md-block mt-2 mt-md-0">
-              {!isReadOnly && (
-                <Button variant="primary" onClick={handleShowAddModal} className="w-100">
-                  <i className="bi bi-plus-lg me-2"></i>Add New Member
-                </Button>
-              )}
-            </Col>
-          </Row>
-        </Card.Header>
-        <Card.Body>
-          <Table striped bordered hover responsive className="members-table">
-            <thead>
-              <tr>
-                <th onClick={() => requestSort('name')} style={{ cursor: 'pointer' }}>Name {getSortIndicator('name')}</th>
-                <th onClick={() => requestSort('dob')} style={{ cursor: 'pointer' }}>Birth date {getSortIndicator('dob')}</th>
-                <th onClick={() => requestSort('phone')} style={{ cursor: 'pointer' }}>Phone {getSortIndicator('phone')}</th>
-                <th onClick={() => requestSort('email')} style={{ cursor: 'pointer' }}>Email {getSortIndicator('email')}</th>
-                {!isReadOnly && <th className="text-center">Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAndSortedMembers.map(member => (
-                <tr key={member.id} onClick={() => handleViewDetails(member)} style={{ cursor: 'pointer' }}>
-                  <td>{member.name}</td>
-                  <td>{new Date(member.dob).toLocaleDateString('en-US', { day: 'numeric', month: 'long' })}</td>
-                  <td>{member.phone}</td>
-                  <td>{member.email}</td>
-                  {!isReadOnly && (
-                    <td className="text-center" onClick={(e) => e.stopPropagation()}>
-                      <Button variant="outline-secondary" size="sm" className="me-2" onClick={() => handleShowEditModal(member)}>Edit</Button>
-                      <Button variant="outline-danger" size="sm" onClick={() => openConfirmDialog(member)}>Delete</Button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </Table>
+      <PageHeader
+        title="Choir Members"
+        subtitle={`${members.length} total members`}
+        actions={!isReadOnly && (
+          <Button variant="primary" onClick={handleShowAddModal} icon="bi-person-plus-fill">Add Member</Button>
+        )}
+      />
+
+      {/* Search & Sort Bar */}
+      <Card className="mb-5">
+        <Card.Body className="py-3">
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1 relative">
+              <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input
+                type="text"
+                placeholder="Search by name, email, or phone..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="form-input pl-10"
+              />
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 whitespace-nowrap">Sort:</span>
+              <select
+                value={`${sortConfig.key}-${sortConfig.direction}`}
+                onChange={(e) => { const [key, direction] = e.target.value.split('-'); setSortConfig({ key, direction }); }}
+                className="form-select w-auto"
+              >
+                <option value="name-ascending">Name (A-Z)</option>
+                <option value="name-descending">Name (Z-A)</option>
+                <option value="dob-ascending">Birth Date (Jan-Dec)</option>
+                <option value="email-ascending">Email (A-Z)</option>
+              </select>
+            </div>
+          </div>
         </Card.Body>
       </Card>
 
-      <Modal show={showModal} onHide={handleCloseModal} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>{memberToEdit ? 'Edit Member Details' : 'Add New Member'}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <MemberForm 
-            onFormSubmit={handleFormSubmit} 
-            onCancel={handleCloseModal} 
-            initialData={memberToEdit}
-          />
-        </Modal.Body>
-      </Modal>
+      {/* Members Table */}
+      {filteredAndSortedMembers.length === 0 ? (
+        <Card>
+          <div className="text-center py-16 text-slate-400">
+            <i className="bi bi-people text-5xl block mb-3 opacity-50"></i>
+            <p className="text-lg font-medium">No members found</p>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {/* Desktop Table */}
+          <div className="hidden md:block">
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Member</th>
+                      <th>Birth Date</th>
+                      <th>Contact</th>
+                      <th className="text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAndSortedMembers.map(member => (
+                      <tr key={member.id}>
+                        <td>
+                          <div className="flex items-center gap-3">
+                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0 ${member.gender === 'Female' ? 'bg-amber-500' : 'bg-sky-500'}`}>
+                              {member.name.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-800 dark:text-slate-100">{member.name}</div>
+                              {member.isOrganist && <span className="text-[10px] font-bold uppercase bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 px-1.5 py-0.5 rounded">Organist</span>}
+                            </div>
+                          </div>
+                        </td>
+                        <td>{member.dob ? new Date(member.dob).toLocaleDateString('en-US', { day: 'numeric', month: 'long' }) : '—'}</td>
+                        <td>
+                          <div className="text-sm space-y-0.5">
+                            {member.phone && <div className="text-slate-600 dark:text-slate-400"><i className="bi bi-telephone mr-1.5 text-xs"></i>{member.phone}</div>}
+                            {member.email && <div className="text-slate-400 dark:text-slate-500 text-xs"><i className="bi bi-envelope mr-1.5"></i>{member.email}</div>}
+                          </div>
+                        </td>
+                        <td>
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => handleViewDetails(member)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="View"><i className="bi bi-eye-fill"></i></button>
+                            {!isReadOnly && (
+                              <>
+                                <button onClick={() => handleShowEditModal(member)} className="p-2 rounded-lg text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors" title="Edit"><i className="bi bi-pencil-fill"></i></button>
+                                <button onClick={() => openConfirmDialog(member)} className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Remove"><i className="bi bi-trash-fill"></i></button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </div>
 
-      <Modal show={showConfirmDialog} onHide={closeConfirmDialog} centered>
-        <Modal.Header closeButton><Modal.Title>Confirm Delete</Modal.Title></Modal.Header>
-        <Modal.Body>Are you sure you want to remove <strong>{memberToRemove?.name}</strong> from the choir?</Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={closeConfirmDialog}>Cancel</Button>
-          <Button variant="danger" onClick={confirmRemove}>Yes, Remove</Button>
-        </Modal.Footer>
-      </Modal>
+          {/* Mobile Cards */}
+          <div className="md:hidden space-y-3">
+            {filteredAndSortedMembers.map(member => (
+              <Card key={member.id} className="animate-fade-in">
+                <Card.Body className="p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold flex-shrink-0 ${member.gender === 'Female' ? 'bg-amber-500' : 'bg-sky-500'}`}>
+                      {member.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-slate-800 dark:text-slate-100 truncate">{member.name}</div>
+                      <div className="text-xs text-slate-400 truncate">{member.email}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => handleViewDetails(member)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-primary-600 bg-primary-50 hover:bg-primary-100 dark:text-primary-400 dark:bg-primary-900/20 transition-colors">
+                      <i className="bi bi-eye-fill"></i> View
+                    </button>
+                    {!isReadOnly && (
+                      <>
+                        <button onClick={() => handleShowEditModal(member)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-slate-400 dark:bg-slate-700 transition-colors">
+                          <i className="bi bi-pencil-fill"></i> Edit
+                        </button>
+                        <button onClick={() => openConfirmDialog(member)} className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 dark:text-red-400 dark:bg-red-900/20 transition-colors">
+                          <i className="bi bi-trash-fill"></i> Remove
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </Card.Body>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
 
-      <Modal show={!!memberToView} onHide={handleCloseDetails} centered>
-        <Modal.Header closeButton><Modal.Title>{memberToView?.name}'s Information</Modal.Title></Modal.Header>
-        <Modal.Body>
-          {memberToView && (
-            <ListGroup variant="flush">
-              <ListGroup.Item><strong>Name:</strong> {memberToView.name}</ListGroup.Item>
-              <ListGroup.Item><strong>Gender:</strong> {memberToView.gender}</ListGroup.Item>
-              <ListGroup.Item><strong>Date of Birth:</strong> {new Date(memberToView.dob).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}</ListGroup.Item>
-              <ListGroup.Item><strong>Marital Status:</strong> {memberToView.maritalStatus || 'N/A'}</ListGroup.Item>
-{memberToView.maritalStatus === 'Married' && (
-    <ListGroup.Item><strong>Wedding Date:</strong> {memberToView.weddingDate ? new Date(memberToView.weddingDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A'}</ListGroup.Item>
-  )}
-              <ListGroup.Item><strong>Phone:</strong> <a href={`tel:${memberToView.phone}`}>{memberToView.phone}</a></ListGroup.Item>
-              <ListGroup.Item><strong>Email:</strong> <a href={`mailto:${memberToView.email}`}>{memberToView.email}</a></ListGroup.Item>
-              <ListGroup.Item><strong>Anbiyam / Community:</strong> {memberToView.anbiyam}</ListGroup.Item>
-              <ListGroup.Item><strong>Address:</strong> {memberToView.address}</ListGroup.Item>
-            </ListGroup>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={handleCloseDetails}>Close</Button>
-        </Modal.Footer>
-      </Modal>
+      {/* Add/Edit Modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={handleCloseModal}>
+          <div className="modal-content max-w-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="font-bold text-slate-800 dark:text-white">{memberToEdit ? 'Edit Member Details' : 'Add New Member'}</h3>
+              <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><i className="bi bi-x-lg"></i></button>
+            </div>
+            <div className="p-5">
+              <MemberForm member={memberToEdit} onSave={handleFormSubmit} onCancel={handleCloseModal} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Remove Modal */}
+      {showConfirmDialog && (
+        <div className="modal-overlay" onClick={closeConfirmDialog}>
+          <div className="modal-content max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                  <i className="bi bi-exclamation-triangle-fill text-red-600 dark:text-red-400"></i>
+                </div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Confirm Remove</h3>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400 mb-1">Are you sure you want to remove <strong>{memberToRemove?.name}</strong>?</p>
+              <p className="text-sm text-slate-400 mb-6">This action cannot be undone.</p>
+              <div className="flex gap-3 justify-end">
+                <Button variant="secondary" onClick={closeConfirmDialog}>Cancel</Button>
+                <Button variant="danger" onClick={confirmRemove}>Yes, Remove</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Details Modal */}
+      {memberToView && (
+        <div className="modal-overlay" onClick={handleCloseDetails}>
+          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="font-bold text-slate-800 dark:text-white">Member Profile</h3>
+              <button onClick={handleCloseDetails} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><i className="bi bi-x-lg"></i></button>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-900 p-6 text-center border-b border-slate-200 dark:border-slate-700">
+              <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-white text-3xl font-bold shadow-lg mb-3 ${memberToView.gender === 'Female' ? 'bg-amber-500' : 'bg-sky-500'}`}>
+                {memberToView.name.charAt(0)}
+              </div>
+              <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-1">{memberToView.name}</h4>
+              <div className="text-sm text-slate-500 mb-2">{memberToView.email}</div>
+              <div className="flex justify-center gap-2">
+                <span className="text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{memberToView.gender}</span>
+                {memberToView.isOrganist && <span className="text-xs font-semibold bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 px-2 py-1 rounded-full">Organist</span>}
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {[
+                { label: 'Date of Birth', value: memberToView.dob ? new Date(memberToView.dob).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A' },
+                { label: 'Phone', value: memberToView.phone || 'N/A' },
+                { label: 'Marital Status', value: memberToView.maritalStatus || 'N/A' },
+                ...(memberToView.maritalStatus === 'Married' ? [{ label: 'Wedding Date', value: memberToView.weddingDate ? new Date(memberToView.weddingDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A' }] : []),
+                { label: 'Anbiyam', value: memberToView.anbiyam || 'N/A' },
+                { label: 'Address', value: memberToView.address || 'N/A' },
+              ].map((item, i) => (
+                <div key={i} className="px-6 py-3">
+                  <div className="text-xs font-bold uppercase text-slate-400 mb-0.5">{item.label}</div>
+                  <div className="text-sm text-slate-700 dark:text-slate-300">{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="p-5 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+              <Button variant="secondary" onClick={handleCloseDetails}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

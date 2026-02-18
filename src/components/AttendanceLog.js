@@ -1,238 +1,479 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Table, Button, Modal, Card, Form, InputGroup, Row, Col, Pagination, Badge, Spinner } from 'react-bootstrap';
+import React, { useState, useMemo } from 'react';
+import PageHeader from './Layout/PageHeader';
+import Button from './UI/Button';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = false, isLoading, teams = [] }) {
-  const [recordToView, setRecordToView] = useState(null);
-  const [recordToDelete, setRecordToDelete] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [sectionFilter, setSectionFilter] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [recordsPerPage, setRecordsPerPage] = useState(window.innerWidth < 768 ? 5 : 10);
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const handleResize = () => {
-      setRecordsPerPage(window.innerWidth < 768 ? 5 : 10);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
 
-  // This effect will reset the page to 1 whenever the filters change.
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, sectionFilter]);
+function toLocalDateStr(dateStr) {
+  // dateStr is "YYYY-MM-DD" — parse as UTC to avoid timezone shifts
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+}
 
-  const filteredHistory = useMemo(() => {
-    const lowerCaseSearch = searchTerm.toLowerCase().trim();
+function isoToKey(dateStr) {
+  return dateStr; // already "YYYY-MM-DD"
+}
 
-    const filtered = history.filter(record => {
-      // 1. Filter by section (choir type) first
-      const matchesSection = sectionFilter === 'all' || record.section === sectionFilter;
-      if (!matchesSection) {
-        return false;
-      }
+function calKey(year, month, day) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
 
-      // 2. If there's no search term, the record passes the filter
-      if (!lowerCaseSearch) {
-        return true;
-      }
-
-      // 3. Check if the search term matches the event name, section, or date
-      const eventNameMatch = record.eventName?.toLowerCase().includes(lowerCaseSearch);
-      const sectionMatch = record.section.toLowerCase().includes(lowerCaseSearch);
-
-      // Robust date matching to fix the filtering bug
-      const dateObj = new Date(record.date);
-      // Use UTC methods to prevent timezone issues
-      const day = String(dateObj.getUTCDate()).padStart(2, '0');
-      const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
-      const year = dateObj.getUTCFullYear();
-      const formattedDate = `${day}/${month}/${year}`;
-      const dateMatch = formattedDate.includes(lowerCaseSearch);
-
-      return eventNameMatch || sectionMatch || dateMatch;
-    });
-
-    // 4. Sort the final filtered list by date
-    return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [history, searchTerm, sectionFilter]);
-
-  const totalPages = Math.ceil(filteredHistory.length / recordsPerPage);
-  const indexOfLastRecord = currentPage * recordsPerPage;
-  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
-  const currentRecords = filteredHistory.slice(indexOfFirstRecord, indexOfLastRecord);
-
-  const handlePageInputChange = (e) => {
-    const pageNum = Number(e.target.value);
-    if (pageNum >= 1 && pageNum <= totalPages) {
-      setCurrentPage(pageNum);
-    }
+// ─── Status badge ─────────────────────────────────────────────────────────────
+function StatusBadge({ status }) {
+  const styles = {
+    'Present': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    'Excused but Present': 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+    'Absent': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+    'Excused': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   };
+  return (
+    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${styles[status] || 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
+      {status || 'Not Marked'}
+    </span>
+  );
+}
 
-  const allSections = useMemo(() => ['all', ...Array.from(new Set(history.map(h => h.section)))], [history]);
+// ─── Section color dot ────────────────────────────────────────────────────────
+const SECTION_COLORS = [
+  '#3772FF', '#45B36B', '#EF466F', '#f59e0b',
+  '#8b5cf6', '#06b6d4', '#f97316', '#ec4899',
+];
+function getSectionColor(section, allSections) {
+  const idx = allSections.indexOf(section);
+  return SECTION_COLORS[idx % SECTION_COLORS.length];
+}
 
-  const openDeleteDialog = (record) => setRecordToDelete(record);
-  const closeDeleteDialog = () => setRecordToDelete(null);
-
-  const confirmDelete = () => {
-    if (recordToDelete) {
-      onDeleteRecord(recordToDelete.id);
-    }
-    closeDeleteDialog();
-  };
-
-  const downloadSingleRecordPdf = (record) => {
-    const doc = new jsPDF();
-    const title = `Attendance Report: ${record.section}`;
-    const subtitle = record.eventName ? `${record.eventName} on ${new Date(record.date).toLocaleDateString('en-GB')}` : `on ${new Date(record.date).toLocaleDateString('en-GB')}`;
-    doc.setFontSize(18);
-    doc.text(title, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(subtitle, 14, 30);
-    const tableColumn = ["Member Name", "Status", "Reason"];
-    const tableRows = [];
-    const sortedRecords = [...record.records].sort((a, b) => a.name.localeCompare(b.name));
-    sortedRecords.forEach(rec => tableRows.push([rec.name, rec.status, rec.reason || '-']));
-    autoTable(doc, {
-      head: [tableColumn], body: tableRows, startY: 40, theme: 'grid',
-      headStyles: { fillColor: [22, 160, 133], halign: 'center' },
-      bodyStyles: { valign: 'middle', halign: 'center' },
-      columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 50 }, 2: { cellWidth: 50 } }
-    });
-    doc.save(`attendance_${record.date}_${record.section.replace(/\s+/g, '-')}.pdf`);
-  };
-
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Present': return <Badge bg="success">Present</Badge>;
-      case 'Excused but Present': return <Badge bg="info">Excused but Present</Badge>;
-      case 'Absent': return <Badge bg="danger">Absent</Badge>;
-      case 'Excused': return <Badge bg="warning" text="dark">Excused</Badge>;
-      default: return <Badge bg="secondary">Not Marked</Badge>;
-    }
-  };
+// ─── Single entry card (inside day detail panel) ──────────────────────────────
+function EntryCard({ record, teams, isReadOnly, onStartEdit, onDelete, onDownload, allSections }) {
+  const [expanded, setExpanded] = useState(false);
+  const totalPresent = record.records.filter(r => r.status === 'Present').length;
+  const total = record.records.length;
+  const pct = total > 0 ? Math.round((totalPresent / total) * 100) : 0;
+  const pctColor = pct < 50 ? 'text-red-500' : pct < 80 ? 'text-amber-500' : 'text-emerald-500';
+  const color = getSectionColor(record.section, allSections);
 
   const getTeamName = (teamId) => {
+    if (teamId === 'all-choir') return 'All Choir Members';
+    if (teamId === 'na-team') return 'NA';
     const team = teams.find(t => t.id === teamId);
     return team ? team.name : 'Unknown Team';
   };
 
-  if (isLoading) {
-    return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '60vh' }}>
-        <Spinner animation="border" role="status">
-          <span className="visually-hidden">Loading History...</span>
-        </Spinner>
+  return (
+    <div className="nock-card overflow-hidden mb-3">
+      {/* Header row */}
+      <div
+        className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }}></div>
+          <div className="min-w-0">
+            <div className="font-semibold text-slate-800 dark:text-white text-sm truncate">{record.section}</div>
+            {record.eventName && <div className="text-xs text-slate-400 truncate">{record.eventName}</div>}
+            {record.section === 'Sunday evening mass' && record.scheduledTeamId && (
+              <div className="text-[10px] text-primary-500 font-semibold mt-0.5">
+                <i className="bi bi-people-fill mr-1"></i>{getTeamName(record.scheduledTeamId)}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="text-right">
+            <div className="text-sm font-bold text-slate-700 dark:text-slate-200">{totalPresent}<span className="text-slate-400 font-normal text-xs">/{total}</span></div>
+            <div className={`text-xs font-bold ${pctColor}`}>{pct}%</div>
+          </div>
+          <i className={`bi bi-chevron-${expanded ? 'up' : 'down'} text-slate-400 text-xs`}></i>
+        </div>
       </div>
-    );
-  }
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-1 px-4 pb-3 border-b border-slate-100 dark:border-slate-700/40">
+        {!isReadOnly && (
+          <>
+            <button
+              onClick={() => onStartEdit(record)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+            >
+              <i className="bi bi-pencil-fill"></i> Edit
+            </button>
+            <button
+              onClick={() => onDelete(record)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              <i className="bi bi-trash-fill"></i> Delete
+            </button>
+          </>
+        )}
+        <button
+          onClick={() => onDownload(record)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+        >
+          <i className="bi bi-download"></i> PDF
+        </button>
+      </div>
+
+      {/* Member list (expanded) */}
+      {expanded && (
+        <div className="divide-y divide-slate-100 dark:divide-slate-700/40">
+          {[...record.records].sort((a, b) => a.name.localeCompare(b.name)).map(rec => (
+            <div key={rec.id} className="flex items-center justify-between px-4 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 flex-shrink-0">
+                  {rec.name.charAt(0)}
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-slate-800 dark:text-slate-100">{rec.name}</div>
+                  {rec.reason && <div className="text-xs text-slate-400 italic">"{rec.reason}"</div>}
+                </div>
+              </div>
+              <StatusBadge status={rec.status} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = false, isLoading, teams = [] }) {
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [selectedDate, setSelectedDate] = useState(null); // "YYYY-MM-DD"
+  const [recordToDelete, setRecordToDelete] = useState(null);
+  const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
+  const [listSearch, setListSearch] = useState('');
+  const [listSection, setListSection] = useState('all');
+
+  // Build a map: "YYYY-MM-DD" → [records]
+  const dateMap = useMemo(() => {
+    const map = {};
+    history.forEach(record => {
+      const key = isoToKey(record.date);
+      if (!map[key]) map[key] = [];
+      map[key].push(record);
+    });
+    return map;
+  }, [history]);
+
+  const allSections = useMemo(() => Array.from(new Set(history.map(h => h.section))).sort(), [history]);
+
+  // Calendar grid
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    return cells;
+  }, [viewYear, viewMonth]);
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else setViewMonth(m => m - 1);
+    setSelectedDate(null);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else setViewMonth(m => m + 1);
+    setSelectedDate(null);
+  };
+  const goToToday = () => {
+    setViewYear(today.getFullYear());
+    setViewMonth(today.getMonth());
+    setSelectedDate(null);
+  };
+
+  const handleDayClick = (day) => {
+    if (!day) return;
+    const key = calKey(viewYear, viewMonth, day);
+    if (!dateMap[key]) return; // no entries — don't select
+    setSelectedDate(prev => prev === key ? null : key);
+  };
+
+  const selectedEntries = selectedDate ? (dateMap[selectedDate] || []) : [];
+
+  const downloadSingleRecordPdf = (record) => {
+    const doc = new jsPDF();
+    doc.setFontSize(18); doc.text(`Attendance Report: ${record.section}`, 14, 22);
+    doc.setFontSize(11); doc.setTextColor(100);
+    doc.text(record.eventName
+      ? `${record.eventName} on ${toLocalDateStr(record.date)}`
+      : `on ${toLocalDateStr(record.date)}`, 14, 30);
+    const sortedRecords = [...record.records].sort((a, b) => a.name.localeCompare(b.name));
+    autoTable(doc, {
+      head: [['Member Name', 'Status', 'Reason']],
+      body: sortedRecords.map(rec => [rec.name, rec.status, rec.reason || '-']),
+      startY: 40, theme: 'grid',
+      headStyles: { fillColor: [55, 114, 255], halign: 'center' },
+      bodyStyles: { valign: 'middle', halign: 'center' },
+    });
+    doc.save(`attendance_${record.date}_${record.section.replace(/\s+/g, '-')}.pdf`);
+  };
+
+  const handleDelete = (record) => setRecordToDelete(record);
+  const confirmDelete = () => {
+    if (recordToDelete) {
+      onDeleteRecord(recordToDelete.id);
+      // If the deleted record was the only one on that day, deselect
+      const key = isoToKey(recordToDelete.date);
+      const remaining = (dateMap[key] || []).filter(r => r.id !== recordToDelete.id);
+      if (remaining.length === 0) setSelectedDate(null);
+    }
+    setRecordToDelete(null);
+  };
+
+  // List view filtered
+  const listRecords = useMemo(() => {
+    const lower = listSearch.toLowerCase().trim();
+    return [...history]
+      .filter(r => {
+        if (listSection !== 'all' && r.section !== listSection) return false;
+        if (!lower) return true;
+        return r.section.toLowerCase().includes(lower)
+          || (r.eventName || '').toLowerCase().includes(lower)
+          || toLocalDateStr(r.date).includes(lower);
+      })
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [history, listSearch, listSection]);
+
+  if (isLoading) return <div className="flex items-center justify-center min-h-[60vh]"><div className="spinner"></div></div>;
 
   return (
     <>
-      <Card className="shadow-sm">
-        <Card.Header><h4 className="mb-0">Past Attendance</h4></Card.Header>
-        <Card.Body>
-          <Row className="mb-3">
-            <Col md={8}><InputGroup><Form.Control placeholder="Search by date, event, or type..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></InputGroup></Col>
-            <Col md={4}><Form.Select value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value)}>{allSections.map(sec => <option key={sec} value={sec}>{sec === 'all' ? 'All Types' : sec}</option>)}</Form.Select></Col>
-          </Row>
-          <Table striped bordered hover responsive>
-            <thead><tr><th>Date</th><th>Type / Event</th><th className="text-center">Attendance</th><th className="text-center">Actions</th></tr></thead>
-            <tbody>
-              {currentRecords.map(record => {
-                const totalPresent = record.records.filter(r => r.status === 'Present').length;
+      <PageHeader
+        title="Attendance History"
+        subtitle="Click any highlighted date to view its attendance entries."
+      />
+
+      {/* View toggle */}
+      <div className="flex items-center gap-2 mb-5">
+        <button
+          onClick={() => setViewMode('calendar')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${viewMode === 'calendar' ? 'bg-primary-500 text-white' : 'bg-white dark:bg-navy-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+          style={viewMode === 'calendar' ? { boxShadow: '0 4px 16px rgba(55,114,255,0.35)' } : {}}
+        >
+          <i className="bi bi-calendar3"></i> Calendar
+        </button>
+        <button
+          onClick={() => setViewMode('list')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${viewMode === 'list' ? 'bg-primary-500 text-white' : 'bg-white dark:bg-navy-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+          style={viewMode === 'list' ? { boxShadow: '0 4px 16px rgba(55,114,255,0.35)' } : {}}
+        >
+          <i className="bi bi-list-ul"></i> List
+        </button>
+      </div>
+
+      {/* ── CALENDAR VIEW ── */}
+      {viewMode === 'calendar' && (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5 items-start">
+          {/* Calendar card */}
+          <div className="nock-card p-4 sm:p-6">
+            {/* Month navigation */}
+            <div className="flex items-center justify-between mb-5">
+              <button onClick={prevMonth} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 transition-colors">
+                <i className="bi bi-chevron-left"></i>
+              </button>
+              <div className="text-center">
+                <div className="text-lg font-extrabold text-slate-800 dark:text-white">{MONTHS[viewMonth]} {viewYear}</div>
+                <button onClick={goToToday} className="text-xs text-primary-500 hover:text-primary-600 font-semibold mt-0.5">Today</button>
+              </div>
+              <button onClick={nextMonth} className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 transition-colors">
+                <i className="bi bi-chevron-right"></i>
+              </button>
+            </div>
+
+            {/* Day headers */}
+            <div className="grid grid-cols-7 mb-2">
+              {DAYS.map(d => (
+                <div key={d} className="text-center text-[11px] font-bold uppercase tracking-wider text-slate-400 py-1">{d}</div>
+              ))}
+            </div>
+
+            {/* Day cells */}
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((day, idx) => {
+                if (!day) return <div key={`empty-${idx}`} />;
+                const key = calKey(viewYear, viewMonth, day);
+                const entries = dateMap[key] || [];
+                const hasEntries = entries.length > 0;
+                const isToday = day === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();
+                const isSelected = selectedDate === key;
+
                 return (
-                  <tr key={record.id}>
-                    <td>{new Date(record.date).toLocaleDateString('en-GB')}</td>
-                    <td>
-                      {record.section}
-                      {record.eventName && <div className="text-muted small">{record.eventName}</div>}
-                      {record.section === 'Sunday evening mass' && record.scheduledTeamId && (
-                        <div className="mt-1">
-                          <Badge bg="primary" className="me-1">
-                            <i className="bi bi-people-fill me-1"></i>
-                            {getTeamName(record.scheduledTeamId)}
-                          </Badge>
-                        </div>
-                      )}
-                    </td>
-                    <td className="text-center">{`${totalPresent} / ${record.records.length}`}</td>
-                    <td className="text-center">
-                      <Button variant="outline-info" size="sm" className="me-2 mb-1 mb-md-0" onClick={() => setRecordToView(record)}>View</Button>
-                      {!isReadOnly && (
-                        <>
-                          <Button variant="outline-secondary" size="sm" className="me-2 mb-1 mb-md-0" onClick={() => onStartEdit(record)}>Edit</Button>
-                          <Button variant="outline-danger" size="sm" className="me-2 mb-1 mb-md-0" onClick={() => openDeleteDialog(record)}>Delete</Button>
-                          <Button variant="outline-success" size="sm" className="mb-1 mb-md-0" onClick={() => downloadSingleRecordPdf(record)} title="Download Report"><i className="bi bi-download"></i></Button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
+                  <button
+                    key={key}
+                    onClick={() => handleDayClick(day)}
+                    disabled={!hasEntries}
+                    className={`
+                      relative flex flex-col items-center justify-start pt-1.5 pb-2 rounded-xl min-h-[52px] sm:min-h-[60px] transition-all duration-150
+                      ${isSelected
+                        ? 'bg-primary-500 text-white shadow-lg'
+                        : isToday
+                          ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400'
+                          : hasEntries
+                            ? 'hover:bg-slate-100 dark:hover:bg-white/8 cursor-pointer text-slate-800 dark:text-slate-100'
+                            : 'text-slate-300 dark:text-slate-600 cursor-default'
+                      }
+                    `}
+                    style={isSelected ? { boxShadow: '0 4px 16px rgba(55,114,255,0.4)' } : {}}
+                  >
+                    <span className={`text-sm font-bold leading-none ${isToday && !isSelected ? 'text-primary-600 dark:text-primary-400' : ''}`}>
+                      {day}
+                    </span>
+                    {/* Section color dots */}
+                    {hasEntries && (
+                      <div className="flex gap-0.5 mt-1.5 flex-wrap justify-center max-w-[36px]">
+                        {entries.slice(0, 3).map((e, i) => (
+                          <div
+                            key={i}
+                            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: isSelected ? 'rgba(255,255,255,0.8)' : getSectionColor(e.section, allSections) }}
+                          />
+                        ))}
+                        {entries.length > 3 && (
+                          <div className={`text-[8px] font-bold leading-none mt-0.5 ${isSelected ? 'text-white/70' : 'text-slate-400'}`}>
+                            +{entries.length - 3}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Entry count badge */}
+                    {hasEntries && entries.length > 1 && !isSelected && (
+                      <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary-500 text-white text-[9px] font-bold flex items-center justify-center">
+                        {entries.length}
+                      </div>
+                    )}
+                  </button>
                 );
               })}
-            </tbody>
-          </Table>
-          {totalPages > 1 && (
-            <div className="d-flex justify-content-center align-items-center mt-3">
-              <Pagination>
-                <Pagination.First onClick={() => setCurrentPage(1)} disabled={currentPage === 1} />
-                <Pagination.Prev onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} />
-                <InputGroup size="sm" style={{ width: '150px' }}>
-                  <InputGroup.Text>Page</InputGroup.Text>
-                  <Form.Control type="number" key={currentPage} defaultValue={currentPage} onBlur={handlePageInputChange} onKeyDown={(e) => { if (e.key === 'Enter') { handlePageInputChange(e); e.target.blur(); } }} min={1} max={totalPages} style={{ textAlign: 'center' }} />
-                  <InputGroup.Text>of {totalPages}</InputGroup.Text>
-                </InputGroup>
-                <Pagination.Next onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} />
-                <Pagination.Last onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} />
-              </Pagination>
+            </div>
+
+            {/* Legend */}
+            <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/40 flex flex-wrap gap-3">
+              {allSections.map((sec, i) => (
+                <div key={sec} className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: SECTION_COLORS[i % SECTION_COLORS.length] }}></div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">{sec}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Detail panel */}
+          <div>
+            {!selectedDate ? (
+              <div className="nock-card p-8 text-center">
+                <i className="bi bi-calendar-event text-4xl text-slate-300 dark:text-slate-600 block mb-3"></i>
+                <p className="text-slate-400 font-medium text-sm">Select a highlighted date<br />to view its entries</p>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-0.5">Entries for</div>
+                    <div className="text-lg font-extrabold text-slate-800 dark:text-white">
+                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  </div>
+                  <button onClick={() => setSelectedDate(null)} className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors">
+                    <i className="bi bi-x-lg text-sm"></i>
+                  </button>
+                </div>
+                {selectedEntries.map(record => (
+                  <EntryCard
+                    key={record.id}
+                    record={record}
+                    teams={teams}
+                    isReadOnly={isReadOnly}
+                    onStartEdit={onStartEdit}
+                    onDelete={handleDelete}
+                    onDownload={downloadSingleRecordPdf}
+                    allSections={allSections}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── LIST VIEW ── */}
+      {viewMode === 'list' && (
+        <div>
+          {/* Filters */}
+          <div className="nock-card p-4 mb-5 flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <i className="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input
+                type="text"
+                placeholder="Search by date, event, or type..."
+                value={listSearch}
+                onChange={e => setListSearch(e.target.value)}
+                className="form-input pl-10"
+              />
+            </div>
+            <select value={listSection} onChange={e => setListSection(e.target.value)} className="form-select sm:w-48">
+              <option value="all">All Types</option>
+              {allSections.map(sec => <option key={sec} value={sec}>{sec}</option>)}
+            </select>
+          </div>
+
+          {listRecords.length === 0 ? (
+            <div className="nock-card p-12 text-center">
+              <i className="bi bi-clock-history text-4xl text-slate-300 dark:text-slate-600 block mb-3"></i>
+              <p className="text-slate-400 font-medium">No records found</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {listRecords.map(record => (
+                <EntryCard
+                  key={record.id}
+                  record={record}
+                  teams={teams}
+                  isReadOnly={isReadOnly}
+                  onStartEdit={onStartEdit}
+                  onDelete={handleDelete}
+                  onDownload={downloadSingleRecordPdf}
+                  allSections={allSections}
+                />
+              ))}
             </div>
           )}
-        </Card.Body>
-      </Card>
-      <Modal show={!!recordToView} onHide={() => setRecordToView(null)} size="lg">
-        <Modal.Header closeButton><Modal.Title>Attendance Details</Modal.Title></Modal.Header>
-        <Modal.Body>
-          {recordToView && (
-            <>
-              <h5>{recordToView.section} on {new Date(recordToView.date).toLocaleDateString('en-GB')}</h5>
-              {recordToView.eventName && <p className="text-muted">{recordToView.eventName}</p>}
-              {recordToView.section === 'Sunday evening mass' && recordToView.scheduledTeamId && (
-                <div className="mb-3">
-                  <Badge bg="primary" className="me-1">
-                    <i className="bi bi-people-fill me-1"></i>
-                    Scheduled Team: {getTeamName(recordToView.scheduledTeamId)}
-                  </Badge>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {recordToDelete && (
+        <div className="modal-overlay" onClick={() => setRecordToDelete(null)}>
+          <div className="modal-content max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+                  <i className="bi bi-exclamation-triangle-fill text-red-600 dark:text-red-400"></i>
                 </div>
-              )}
-              <Table striped bordered size="sm">
-                <thead><tr><th>Member Name</th><th className="text-center">Status</th></tr></thead>
-                <tbody>
-                  {recordToView.records.sort((a, b) => a.name.localeCompare(b.name)).map(rec => (
-                    <tr key={rec.id}>
-                      <td>{rec.name}</td>
-                      <td className="text-center">
-                        {getStatusBadge(rec.status)}
-                        {!isReadOnly && rec.reason && <div className="text-muted small fst-italic mt-1">({rec.reason})</div>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </>
-          )}
-        </Modal.Body>
-      </Modal>
-      <Modal show={!!recordToDelete} onHide={closeDeleteDialog} centered>
-        <Modal.Header closeButton><Modal.Title>Confirm Delete</Modal.Title></Modal.Header>
-        <Modal.Body>Are you sure you want to permanently delete this record?</Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={closeDeleteDialog}>Cancel</Button>
-          <Button variant="danger" onClick={confirmDelete}>Yes, Delete</Button>
-        </Modal.Footer>
-      </Modal>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Confirm Delete</h3>
+              </div>
+              <p className="text-slate-600 dark:text-slate-400 mb-1">Permanently delete this attendance record?</p>
+              <p className="text-sm text-slate-400 mb-6">
+                <strong>{recordToDelete.section}</strong> on {toLocalDateStr(recordToDelete.date)}
+              </p>
+              <div className="flex gap-3 justify-end">
+                <Button variant="secondary" onClick={() => setRecordToDelete(null)}>Cancel</Button>
+                <Button variant="danger" onClick={confirmDelete}>Delete</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

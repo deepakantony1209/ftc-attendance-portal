@@ -100,12 +100,12 @@ function Login({ onLogin, onPasswordReset }) {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-white text-primary-700 hover:bg-white/90 dark:bg-primary-600 dark:text-white dark:hover:bg-primary-700 font-bold py-3.5 rounded-xl transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full bg-primary-600 text-white hover:bg-primary-700 font-bold py-3.5 rounded-xl transition-all duration-200 shadow-lg shadow-primary-500/30 hover:shadow-primary-500/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isLoading ? (
-                  <><div className="spinner spinner-sm border-primary-700 dark:border-white border-r-transparent"></div> Logging In...</>
+                  <><div className="spinner spinner-sm border-white border-r-transparent"></div> Signing In...</>
                 ) : (
-                  'Log In'
+                  <><span>Sign In</span> <i className="bi bi-arrow-right"></i></>
                 )}
               </button>
             </form>

@@ -258,14 +258,14 @@ function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = fals
       <div className="flex items-center gap-2 mb-5">
         <button
           onClick={() => setViewMode('calendar')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${viewMode === 'calendar' ? 'bg-primary-500 text-white' : 'bg-white dark:bg-navy-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${viewMode === 'calendar' ? 'bg-primary-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
           style={viewMode === 'calendar' ? { boxShadow: '0 4px 16px rgba(55,114,255,0.35)' } : {}}
         >
           <i className="bi bi-calendar3"></i> Calendar
         </button>
         <button
           onClick={() => setViewMode('list')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${viewMode === 'list' ? 'bg-primary-500 text-white' : 'bg-white dark:bg-navy-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5'}`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${viewMode === 'list' ? 'bg-primary-500 text-white' : 'bg-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'}`}
           style={viewMode === 'list' ? { boxShadow: '0 4px 16px rgba(55,114,255,0.35)' } : {}}
         >
           <i className="bi bi-list-ul"></i> List

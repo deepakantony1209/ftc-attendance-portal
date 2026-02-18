@@ -3,7 +3,7 @@ import PageHeader from './Layout/PageHeader';
 import Card from './UI/Card';
 import StatCard from './UI/StatCard';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title } from 'chart.js';
-import { Doughnut, Bar } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pointValues, statusMultipliers } from './ScoreLogic';

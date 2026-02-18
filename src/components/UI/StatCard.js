@@ -37,25 +37,24 @@ const StatCard = ({ title, value, icon, subtext, color = 'primary' }) => {
     const c = colorMap[color] || colorMap.primary;
 
     return (
-        <div
-            className="nock-card p-4 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 cursor-default"
-        >
-            <div className="flex items-start justify-between gap-2">
+        <div className="nock-card p-3 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 cursor-default">
+            <div className="flex items-start justify-between gap-1.5 sm:gap-2">
                 <div className="min-w-0 flex-1">
-                    <div className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1.5 leading-tight">{title}</div>
-                    <div className="text-2xl sm:text-3xl font-extrabold text-slate-800 dark:text-white leading-none break-all">{value}</div>
+                    <div className="text-[9px] sm:text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1 leading-tight">{title}</div>
+                    <div className="text-xl sm:text-3xl font-extrabold text-slate-800 dark:text-white leading-none whitespace-nowrap">{value}</div>
                     {subtext && <div className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">{subtext}</div>}
                 </div>
                 <div
-                    className={`${c.iconBg} p-2.5 sm:p-3 rounded-2xl flex-shrink-0 flex items-center justify-center mt-0.5`}
+                    className={`${c.iconBg} p-2 sm:p-3 rounded-xl sm:rounded-2xl flex-shrink-0 flex items-center justify-center mt-0.5`}
                     style={{ boxShadow: `0 4px 12px ${c.glow}` }}
                 >
-                    <i className={`bi ${icon} text-lg sm:text-xl ${c.icon}`}></i>
+                    <i className={`bi ${icon} text-base sm:text-xl ${c.icon}`}></i>
                 </div>
             </div>
         </div>
     );
 };
+
 
 
 export default StatCard;

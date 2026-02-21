@@ -29,6 +29,7 @@ const Sidebar = ({ user, show, onHide, onLogout, theme, toggleTheme }) => {
 
     const adminLinks = [
         { to: '/', icon: 'bi-grid-1x2-fill', label: 'Dashboard' },
+        { to: '/schedule', icon: 'bi-calendar-week', label: 'Schedule' },
         { to: '/attendance', icon: 'bi-calendar-check-fill', label: 'Attendance' },
         { to: '/log', icon: 'bi-clock-history', label: 'History Log' },
         { to: '/teams', icon: 'bi-people-fill', label: 'Teams' },
@@ -38,6 +39,7 @@ const Sidebar = ({ user, show, onHide, onLogout, theme, toggleTheme }) => {
 
     const memberLinks = [
         { to: '/', icon: 'bi-grid-1x2-fill', label: 'Dashboard' },
+        { to: '/schedule', icon: 'bi-calendar-week', label: 'Schedule' },
         { to: '/my-stats', icon: 'bi-speedometer2', label: 'My Stats' },
         { to: '/log', icon: 'bi-clock-history', label: 'History' },
         { to: '/teams', icon: 'bi-people-fill', label: 'Teams' },

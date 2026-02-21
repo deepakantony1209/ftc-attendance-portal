@@ -37,23 +37,11 @@
 
   /* ── Nock Card ── */
   .nock-card {
-    background: #ffffff;
-    border-radius: 1.5rem;
-    box-shadow: 0 4px 24px rgba(55, 114, 255, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04);
-    transition: box-shadow 0.2s ease, transform 0.2s ease;
+    @apply bg-white rounded-3xl shadow-card transition-all duration-200 dark:bg-navy-800 dark:shadow-card-dark;
   }
 
   .nock-card:hover {
-    box-shadow: 0 8px 32px rgba(55, 114, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
-  }
-
-  .dark .nock-card {
-    background: #1a1d2e;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
-  }
-
-  .dark .nock-card:hover {
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    @apply shadow-card-hover transform -translate-y-0.5 dark:shadow-card-dark;
   }
 
   /* ── Table ── */
@@ -79,16 +67,11 @@
 
   /* ── Modal ── */
   .modal-overlay {
-    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in;
+    @apply fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in;
   }
 
   .modal-content {
-    @apply rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-up;
-    background: #ffffff;
-  }
-
-  .dark .modal-content {
-    background: #1a1d2e;
+    @apply rounded-3xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-slide-up bg-white dark:bg-navy-800;
   }
 
   /* ── Spinner ── */

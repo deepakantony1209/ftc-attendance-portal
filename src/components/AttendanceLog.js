@@ -3,6 +3,7 @@ import PageHeader from './Layout/PageHeader';
 import Button from './UI/Button';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { sanitizeText } from '../utils/pdfUtils';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -203,20 +204,20 @@ function AttendanceLog({ history, onDeleteRecord, onStartEdit, isReadOnly = fals
 
   const downloadSingleRecordPdf = (record) => {
     const doc = new jsPDF();
-    doc.setFontSize(18); doc.text(`Attendance Report: ${record.section}`, 14, 22);
+    doc.setFontSize(18); doc.text(`Attendance Report: ${sanitizeText(record.section)}`, 14, 22);
     doc.setFontSize(11); doc.setTextColor(100);
     doc.text(record.eventName
-      ? `${record.eventName} on ${toLocalDateStr(record.date)}`
+      ? `${sanitizeText(record.eventName)} on ${toLocalDateStr(record.date)}`
       : `on ${toLocalDateStr(record.date)}`, 14, 30);
     const sortedRecords = [...record.records].sort((a, b) => a.name.localeCompare(b.name));
     autoTable(doc, {
       head: [['Member Name', 'Status', 'Reason']],
-      body: sortedRecords.map(rec => [rec.name, rec.status, rec.reason || '-']),
+      body: sortedRecords.map(rec => [sanitizeText(rec.name), rec.status, sanitizeText(rec.reason || '-')]),
       startY: 40, theme: 'grid',
       headStyles: { fillColor: [55, 114, 255], halign: 'center' },
       bodyStyles: { valign: 'middle', halign: 'center' },
     });
-    doc.save(`attendance_${record.date}_${record.section.replace(/\s+/g, '-')}.pdf`);
+    doc.save(`attendance_${record.date}_${sanitizeText(record.section).replace(/\s+/g, '-')}.pdf`);
   };
 
   const handleDelete = (record) => setRecordToDelete(record);

@@ -87,15 +87,15 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
     const memberStats = (choirMembersList || []).map(member => {
       let totalPointsAwarded = 0; let totalMaxPoints = 0;
       const excuseCountsByMonth = {};
-      const userSundayTeam = teams ? teams.find(t => t.type === 'sunday' && t.members.includes(member.id)) : null;
-
       relevantHistory.forEach(event => {
         const eventPoints = pointValues[event.section] || 0;
         if (eventPoints > 0) {
           const record = event.records ? event.records.find(rec => rec.id === member.id) : null;
           if (!record) return;
-          if (event.section === 'Sunday evening mass' && event.scheduledTeamId) {
-            const isMyTeamScheduled = event.scheduledTeamId === userSundayTeam?.id;
+          if (record.status === 'Not Applicable') return; // Excluded from percentage
+          if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+            const scheduledTeam = teams ? teams.find(t => t.id === event.scheduledTeamId) : null;
+            const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(member.id));
             if (!isMyTeamScheduled) {
               if (record.status === 'Present' || record.status === 'Excused but Present') {
                 totalMaxPoints += eventPoints;

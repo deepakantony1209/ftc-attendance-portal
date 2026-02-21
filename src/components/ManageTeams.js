@@ -4,11 +4,12 @@ import Button from './UI/Button';
 import Card from './UI/Card';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatDateForDisplay } from '../utils/scheduleUtils';
+
 
 function ManageTeams({
   loggedInUser, choirMembersList, teams, onUpdateTeam, onCreateTeam, onDeleteTeam,
-  isReadOnly = false, isLoading, sundaySchedule = [], onGenerateSchedule, onUpdateScheduleEntry
+
+  isReadOnly = false, isLoading
 }) {
   const [sundaySearch, setSundaySearch] = useState('');
   const [marriageSearch, setMarriageSearch] = useState('');
@@ -17,9 +18,7 @@ function ManageTeams({
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showEditScheduleModal, setShowEditScheduleModal] = useState(false);
-  const [scheduleToEdit, setScheduleToEdit] = useState(null);
-  const [selectedTeamForSchedule, setSelectedTeamForSchedule] = useState('');
+
   const [newTeamName, setNewTeamName] = useState('');
   const [teamToModify, setTeamToModify] = useState(null);
   const [teamTypeToCreate, setTeamTypeToCreate] = useState(null);
@@ -69,20 +68,6 @@ function ManageTeams({
   const handleRemoveMember = (team, memberId) => onUpdateTeam(team.id, team.members.filter(id => id !== memberId));
   const handleCreateTeamSubmit = async (e) => { e.preventDefault(); const ok = await onCreateTeam(newTeamName, teamTypeToCreate); if (ok) { setNewTeamName(''); setShowCreateModal(false); } };
   const handleDeleteTeamConfirm = () => { if (teamToModify) { onDeleteTeam(teamToModify.id, teamToModify.name); setShowDeleteModal(false); setTeamToModify(null); } };
-  const handleUpdateSchedule = () => { if (scheduleToEdit && selectedTeamForSchedule && onUpdateScheduleEntry) { onUpdateScheduleEntry(scheduleToEdit.date, selectedTeamForSchedule); setShowEditScheduleModal(false); } };
-
-  const upcomingSchedule = useMemo(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    return sundaySchedule.filter(s => new Date(s.date) >= today).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 6);
-  }, [sundaySchedule]);
-
-  const scheduleContext = useMemo(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const sorted = [...sundaySchedule].sort((a, b) => new Date(a.date) - new Date(b.date));
-    const upcomingIndex = sorted.findIndex(s => { const d = new Date(s.date); d.setHours(0, 0, 0, 0); return d >= today; });
-    if (upcomingIndex === -1) return { previous: sorted.length > 0 ? sorted[sorted.length - 1] : null, current: null, next: null };
-    return { previous: upcomingIndex > 0 ? sorted[upcomingIndex - 1] : null, current: sorted[upcomingIndex], next: sorted[upcomingIndex + 1] || null };
-  }, [sundaySchedule]);
 
   const handleDownloadPdf = (teamData, title) => {
     const doc = new jsPDF();
@@ -162,55 +147,9 @@ function ManageTeams({
       <PageHeader
         title="Manage Teams"
         subtitle="Organize Sunday and Marriage mass choirs."
-        actions={!isReadOnly && onGenerateSchedule && (
-          <Button variant="success" onClick={onGenerateSchedule} icon="bi-calendar-week">Generate 12-Week Schedule</Button>
-        )}
       />
 
-      {/* Sunday Schedule */}
-      {sundayTeams.length > 0 && (
-        isReadOnly ? (
-          <div className="bg-gradient-to-br from-primary-600 to-indigo-700 dark:from-primary-800 dark:to-indigo-900 rounded-2xl p-6 md:p-8 text-white text-center mb-6 shadow-xl">
-            {scheduleContext.current ? (
-              <>
-                <div className="text-xs font-bold uppercase tracking-wider opacity-60 mb-2">Next Sunday Mass</div>
-                <h2 className="text-3xl md:text-4xl font-extrabold mb-1">{scheduleContext.current.teamName}</h2>
-                <div className="text-lg opacity-75 mb-5">{formatDateForDisplay(scheduleContext.current.date)}</div>
-                <div className="flex justify-center gap-6 opacity-60">
-                  {scheduleContext.previous && <div className="border-r border-white/20 pr-6"><div className="text-[10px] uppercase tracking-wider">Previous</div><div className="font-medium">{scheduleContext.previous.teamName}</div></div>}
-                  {scheduleContext.next && <div><div className="text-[10px] uppercase tracking-wider">Next Up</div><div className="font-medium">{scheduleContext.next.teamName}</div></div>}
-                </div>
-              </>
-            ) : (
-              <div className="py-4"><i className="bi bi-calendar-x text-3xl opacity-50 block mb-2"></i>No upcoming schedule available.</div>
-            )}
-          </div>
-        ) : (
-          <Card className="mb-5">
-            <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-sm">Upcoming Sunday Schedule</h5></Card.Header>
-            <Card.Body className="p-0">
-              <div className="overflow-x-auto">
-                <table className="data-table">
-                  <thead><tr><th>Date</th><th>Scheduled Team</th>{!isReadOnly && onUpdateScheduleEntry && <th className="text-right">Action</th>}</tr></thead>
-                  <tbody>
-                    {upcomingSchedule.length > 0 ? upcomingSchedule.map(schedule => (
-                      <tr key={schedule.date}>
-                        <td className="font-medium">{formatDateForDisplay(schedule.date)}</td>
-                        <td><span className="text-xs font-bold bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400 px-2.5 py-1 rounded-full">{schedule.teamName}</span></td>
-                        {!isReadOnly && onUpdateScheduleEntry && (
-                          <td className="text-right"><Button variant="secondary" size="sm" onClick={() => { setScheduleToEdit(schedule); setSelectedTeamForSchedule(schedule.teamId); setShowEditScheduleModal(true); }} icon="bi-pencil-square">Change</Button></td>
-                        )}
-                      </tr>
-                    )) : (
-                      <tr><td colSpan="3" className="text-center py-6 text-slate-400">No schedule generated. Use the "Generate" button above.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card.Body>
-          </Card>
-        )
-      )}
+
 
       {renderTeamSection('Sunday Evening Mass Teams', filteredSundayTeams, sundaySearch, setSundaySearch, sundayOpenTeams, setSundayOpenTeams, 'sunday', () => handleDownloadPdf(sundayTeams, 'Sunday Evening Mass Teams'))}
       {renderTeamSection('Marriage Mass Teams', filteredMarriageTeams, marriageSearch, setMarriageSearch, marriageOpenTeams, setMarriageOpenTeams, 'marriage', () => handleDownloadPdf(marriageTeams, 'Marriage Mass Teams'))}
@@ -271,37 +210,7 @@ function ManageTeams({
         </div>
       )}
 
-      {/* Edit Schedule Modal */}
-      {!isReadOnly && showEditScheduleModal && (
-        <div className="modal-overlay" onClick={() => setShowEditScheduleModal(false)}>
-          <div className="modal-content max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-slate-200 dark:border-slate-700">
-              <h3 className="font-bold text-slate-800 dark:text-white">Change Schedule</h3>
-              <button onClick={() => setShowEditScheduleModal(false)} className="text-slate-400 hover:text-slate-600"><i className="bi bi-x-lg"></i></button>
-            </div>
-            <div className="p-5 space-y-4">
-              {scheduleToEdit && (
-                <>
-                  <div className="text-center mb-2">
-                    <div className="text-xs font-bold uppercase text-slate-400">Scheduled Date</div>
-                    <div className="text-xl font-bold text-slate-800 dark:text-white">{formatDateForDisplay(scheduleToEdit.date)}</div>
-                  </div>
-                  <div><label className="form-label font-bold">Select New Team</label>
-                    <select value={selectedTeamForSchedule} onChange={(e) => setSelectedTeamForSchedule(e.target.value)} className="form-select">
-                      <option value="">-- Choose Team --</option>
-                      <option value="all-choir">All Choir Members</option>
-                      <option value="na-team">NA (Not Applicable)</option>
-                      <option disabled>──────────</option>
-                      {sundayTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                </>
-              )}
-              <div className="flex gap-3 justify-end"><Button variant="secondary" onClick={() => setShowEditScheduleModal(false)}>Cancel</Button><Button variant="primary" onClick={handleUpdateSchedule} disabled={!selectedTeamForSchedule}>Save</Button></div>
-            </div>
-          </div>
-        </div>
-      )}
+
     </>
   );
 }

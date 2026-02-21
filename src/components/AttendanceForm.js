@@ -11,9 +11,10 @@ function AttendanceForm({
   isEditing, onCancelEdit,
   handleToggleBulkMarking, handleClearAttendance, bulkMarkingMode,
   teams, selectedScheduledTeam, setSelectedScheduledTeam,
-  sundaySchedule = []
+  sundaySchedule = [], eventSchedules = []
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [eventTime, setEventTime] = useState('');
   const [openPanels, setOpenPanels] = useState({ male: false, female: false });
 
   const isSectionDisabled = !selectedDate;
@@ -22,6 +23,7 @@ function AttendanceForm({
   const getStatusClasses = (status) => {
     if (status === 'Present' || status === 'Excused but Present') return 'bg-emerald-600 text-white border-emerald-600';
     if (status === 'Absent' || status === 'Excused') return 'bg-red-600 text-white border-red-600';
+    if (status === 'Not Applicable') return 'bg-slate-400 text-white border-slate-400';
     return '';
   };
 
@@ -42,14 +44,22 @@ function AttendanceForm({
   }, [searchTerm, maleMembers.length, femaleMembers.length]);
 
   useEffect(() => {
+    setEventTime('');
     if (selectedDate && selectedSection === 'Sunday evening mass' && sundaySchedule.length > 0) {
       const dateObj = new Date(selectedDate);
       if (dateObj.getDay() === 0) {
         const schedule = sundaySchedule.find(s => s.date === selectedDate);
         if (schedule && schedule.teamId) setSelectedScheduledTeam(schedule.teamId);
       }
+    } else if (selectedDate && selectedSection === 'Marriage mass' && eventSchedules && eventSchedules.length > 0) {
+      const schedule = eventSchedules.find(s => s.date === selectedDate && s.type === 'Marriage mass');
+      if (schedule) {
+        if (schedule.name) setEventName(schedule.name);
+        if (schedule.teamId) setSelectedScheduledTeam(schedule.teamId);
+        if (schedule.time) setEventTime(schedule.time);
+      }
     }
-  }, [selectedDate, selectedSection, sundaySchedule, setSelectedScheduledTeam]);
+  }, [selectedDate, selectedSection, sundaySchedule, eventSchedules, setSelectedScheduledTeam, setEventName]);
 
   const renderMemberList = (memberList, gender) => {
     if (memberList.length === 0) {
@@ -78,6 +88,7 @@ function AttendanceForm({
             <option value="Absent">Absent</option>
             <option value="Excused but Present">Excused but Present</option>
             <option value="Excused">Excused</option>
+            <option value="Not Applicable">Not Applicable</option>
           </select>
           {(member.status === 'Excused' || member.status === 'Excused but Present') && (
             <input
@@ -131,28 +142,31 @@ function AttendanceForm({
               </div>
             )}
 
-            {selectedSection === 'Sunday evening mass' && (
+            {(selectedSection === 'Sunday evening mass' || selectedSection === 'Marriage mass') && (
               <div className="md:col-span-2">
                 <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
-                  {selectedScheduledTeam && sundaySchedule.find(s => s.date === selectedDate) && (
-                    <div className="alert alert-info mb-3">
-                      <i className="bi bi-info-circle"></i> Team auto-selected based on rotation schedule.
-                    </div>
-                  )}
+                  {selectedScheduledTeam && (
+                    (selectedSection === 'Sunday evening mass' && sundaySchedule.find(s => s.date === selectedDate)) ||
+                    (selectedSection === 'Marriage mass' && eventSchedules?.find(s => s.date === selectedDate && s.type === 'Marriage mass'))
+                  ) && (
+                      <div className="alert alert-info mb-3">
+                        <i className="bi bi-info-circle"></i> Team auto-selected based on schedule.{eventTime && <span className="font-bold ml-1">Time: {eventTime}</span>}
+                      </div>
+                    )}
                   <label className="form-label">Scheduled Team</label>
                   <select value={selectedScheduledTeam} onChange={(e) => setSelectedScheduledTeam(e.target.value)} required disabled={isSectionDisabled} className="form-select mb-2">
                     <option value="">Select which team is scheduled...</option>
-                    <option value="all-choir">All Choir Members</option>
+                    <option value="whole">Whole Choir</option>
                     <option value="na-team">NA (Not Applicable)</option>
                     <option disabled>──────────</option>
-                    {teams.filter(team => team.type === 'sunday').sort((a, b) => a.name.localeCompare(b.name)).map(team => (
+                    {teams.filter(team => team.type === (selectedSection === 'Sunday evening mass' ? 'sunday' : 'marriage')).sort((a, b) => a.name.localeCompare(b.name)).map(team => (
                       <option key={team.id} value={team.id}>{team.name}</option>
                     ))}
                   </select>
                   {selectedScheduledTeam === 'na-team' && (
                     <div className="text-amber-600 dark:text-amber-400 text-sm flex items-center gap-1"><i className="bi bi-exclamation-triangle"></i> Attendance will not count.</div>
                   )}
-                  {selectedScheduledTeam === 'all-choir' && (
+                  {selectedScheduledTeam === 'whole' && (
                     <div className="text-emerald-600 dark:text-emerald-400 text-sm flex items-center gap-1"><i className="bi bi-people-fill"></i> Open for all members.</div>
                   )}
                 </div>
@@ -226,7 +240,7 @@ function AttendanceForm({
                     <input
                       type="checkbox"
                       checked={bulkMarkingMode === 'present'}
-                      disabled={bulkMarkingMode === 'absent' || isContentDisabled}
+                      disabled={bulkMarkingMode === 'absent' || bulkMarkingMode === 'na' || isContentDisabled}
                       onChange={() => handleToggleBulkMarking('present')}
                       className="sr-only peer"
                     />
@@ -242,7 +256,7 @@ function AttendanceForm({
                     <input
                       type="checkbox"
                       checked={bulkMarkingMode === 'absent'}
-                      disabled={bulkMarkingMode === 'present' || isContentDisabled}
+                      disabled={bulkMarkingMode === 'present' || bulkMarkingMode === 'na' || isContentDisabled}
                       onChange={() => handleToggleBulkMarking('absent')}
                       className="sr-only peer"
                     />
@@ -250,6 +264,22 @@ function AttendanceForm({
                     <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
                   </div>
                   <span className="text-sm font-medium text-white">Mark Remaining Absent</span>
+                </label>
+
+                {/* Mark Remaining N/A */}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={bulkMarkingMode === 'na'}
+                      disabled={bulkMarkingMode === 'present' || bulkMarkingMode === 'absent' || isContentDisabled}
+                      onChange={() => handleToggleBulkMarking('na')}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-600 rounded-full peer peer-checked:bg-slate-400 transition-colors"></div>
+                    <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full peer-checked:translate-x-5 transition-transform"></div>
+                  </div>
+                  <span className="text-sm font-medium text-white">Mark Remaining N/A</span>
                 </label>
               </div>
 

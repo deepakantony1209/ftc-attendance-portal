@@ -7,6 +7,7 @@ import { Bar } from 'react-chartjs-2';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pointValues, statusMultipliers } from './ScoreLogic';
+import { sanitizeText } from '../utils/pdfUtils';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
@@ -17,7 +18,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
 function isoToKey(dateStr) { return dateStr; }
 function calKey(year, month, day) { return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; }
 
-function MyStats({ user, history, teams = [], theme }) {
+function MyStats({ user, history, teams = [], theme, sundaySchedule = [], eventSchedules = [] }) {
   const isDark = theme === 'dark';
   const today = new Date();
 
@@ -46,7 +47,7 @@ function MyStats({ user, history, teams = [], theme }) {
 
   // ─── USER STATS CALCULATION ───
   const userStats = useMemo(() => {
-    const userSundayTeam = teams.find(t => t.type === 'sunday' && t.members.includes(user.id));
+
     const currentYear = new Date().getFullYear();
     const relevantHistory = safeHistory.filter(event => pointValues.hasOwnProperty(event.section) && new Date(event.date).getFullYear() === currentYear);
     const sortedHistory = [...relevantHistory].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -65,8 +66,9 @@ function MyStats({ user, history, teams = [], theme }) {
         if (!sectionData[sectionName]) sectionData[sectionName] = { pointsAwarded: 0, maxPoints: 0 };
         const maxPointsForEvent = pointValues[sectionName] || 0;
 
-        if (event.section === 'Sunday evening mass' && event.scheduledTeamId) {
-          const isMyTeamScheduled = event.scheduledTeamId === userSundayTeam?.id;
+        if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+          const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+          const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(user.id));
           if (!isMyTeamScheduled) {
             if (myRecord.status === 'Present' || myRecord.status === 'Excused but Present') {
               totalMaxPoints += maxPointsForEvent;
@@ -79,6 +81,7 @@ function MyStats({ user, history, teams = [], theme }) {
           }
         }
 
+        if (myRecord.status === 'Not Applicable') return; // Fully excluded from percentage
         totalMaxPoints += maxPointsForEvent;
         sectionData[sectionName].maxPoints += maxPointsForEvent;
         let effectiveStatus = myRecord.status;
@@ -101,7 +104,7 @@ function MyStats({ user, history, teams = [], theme }) {
 
   // ─── MONTHLY / YEARLY BREAKDOWN ───
   const monthlyYearlyStats = useMemo(() => {
-    const userSundayTeam = teams.find(t => t.type === 'sunday' && t.members.includes(user.id));
+
     const recordsInYear = safeHistory.filter(event => new Date(event.date).getFullYear() === selectedYear);
 
     if (selectedMonth === 'all') {
@@ -114,8 +117,10 @@ function MyStats({ user, history, teams = [], theme }) {
         const myRecord = event.records.find(r => r.id === user.id);
         if (myRecord && pointValues[event.section]) {
           const maxPointsForEvent = pointValues[event.section];
-          if (event.section === 'Sunday evening mass' && event.scheduledTeamId) {
-            if (event.scheduledTeamId !== userSundayTeam?.id) {
+          if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+            const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+            const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(user.id));
+            if (!isMyTeamScheduled) {
               if (myRecord.status === 'Present' || myRecord.status === 'Excused but Present') {
                 yearlyMaxPoints += maxPointsForEvent;
                 yearlyPoints += maxPointsForEvent * (statusMultipliers[myRecord.status] || 0);
@@ -123,6 +128,7 @@ function MyStats({ user, history, teams = [], theme }) {
               return;
             }
           }
+          if (myRecord.status === 'Not Applicable') return; // Fully excluded from percentage
           yearlyMaxPoints += maxPointsForEvent;
           let effectiveStatus = myRecord.status;
           if (myRecord.status === 'Excused') {
@@ -144,8 +150,10 @@ function MyStats({ user, history, teams = [], theme }) {
         const myRecord = event.records.find(r => r.id === user.id);
         if (myRecord && pointValues[event.section]) {
           const maxPointsForEvent = pointValues[event.section];
-          if (event.section === 'Sunday evening mass' && event.scheduledTeamId) {
-            if (event.scheduledTeamId !== userSundayTeam?.id) {
+          if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+            const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+            const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(user.id));
+            if (!isMyTeamScheduled) {
               if (myRecord.status === 'Present' || myRecord.status === 'Excused but Present') {
                 monthlyMaxPoints += maxPointsForEvent;
                 monthlyPoints += maxPointsForEvent * (statusMultipliers[myRecord.status] || 0);
@@ -153,6 +161,7 @@ function MyStats({ user, history, teams = [], theme }) {
               return;
             }
           }
+          if (myRecord.status === 'Not Applicable') return; // Fully excluded from percentage
           monthlyMaxPoints += maxPointsForEvent;
           let effectiveStatus = myRecord.status;
           if (myRecord.status === 'Excused') {
@@ -182,8 +191,53 @@ function MyStats({ user, history, teams = [], theme }) {
         });
       }
     });
+
+    const isAssignedToTeam = (teamId) => {
+      if (teamId === 'whole') return true;
+      const team = teams.find(t => t.id === teamId);
+      return team && team.members.includes(user.id);
+    };
+
+    sundaySchedule.forEach(sch => {
+      if (isAssignedToTeam(sch.teamId)) {
+        const key = isoToKey(sch.date);
+        if (!map[key]) map[key] = [];
+        const hasRecord = map[key].some(e => e.section === 'Sunday evening mass');
+        if (!hasRecord) {
+          map[key].push({
+            date: sch.date,
+            section: 'Sunday evening mass',
+            eventName: 'Sunday Evening Mass',
+            myStatus: 'Scheduled',
+            scheduledTeamId: sch.teamId,
+            teamName: sch.teamName || 'Scheduled Team',
+            pointsPossible: pointValues['Sunday evening mass'] || 0
+          });
+        }
+      }
+    });
+
+    eventSchedules.forEach(sch => {
+      if (isAssignedToTeam(sch.teamId)) {
+        const key = isoToKey(sch.date);
+        if (!map[key]) map[key] = [];
+        const hasRecord = map[key].some(e => e.section === sch.type);
+        if (!hasRecord) {
+          map[key].push({
+            date: sch.date,
+            section: sch.type,
+            eventName: sch.name + (sch.time ? ` (${sch.time})` : ''),
+            myStatus: 'Scheduled',
+            scheduledTeamId: sch.teamId,
+            teamName: sch.teamId === 'whole' ? 'Whole Choir' : (sch.teamName || 'Scheduled for you'),
+            pointsPossible: pointValues[sch.type] || 0
+          });
+        }
+      }
+    });
+
     return map;
-  }, [safeHistory, user]);
+  }, [safeHistory, user, sundaySchedule, eventSchedules, teams]);
 
   const calendarDays = useMemo(() => {
     const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
@@ -217,12 +271,47 @@ function MyStats({ user, history, teams = [], theme }) {
     const currentYear = new Date().getFullYear();
     const doc = new jsPDF();
     doc.setFontSize(18); doc.text(`My Attendance Report - ${currentYear}`, 14, 22);
-    doc.setFontSize(14); doc.text(user.name, 14, 30);
+    doc.setFontSize(14); doc.text(sanitizeText(user.name), 14, 30);
     doc.setFontSize(10); doc.setTextColor(100); doc.text(`Report Generated: ${new Date().toLocaleDateString('en-GB')}`, 14, 36);
     autoTable(doc, { startY: 45, head: [['Category', 'Value']], body: [[`My Attendance % (${currentYear})`, `${userStats.percentage}%`], ['Total Credits Earned', `${userStats.totalPointsAwarded} / ${userStats.totalMaxPoints}`], ['"Excused but Present" Count', userStats.excusedPresentCount], ['"Excused" Absences Count', userStats.excusedCount]], theme: 'striped', headStyles: { fillColor: [13, 110, 253] } });
     const tableRows = Object.entries(userStats.sectionData).map(([section, data]) => { const percentage = data.maxPoints > 0 ? ((data.pointsAwarded / data.maxPoints) * 100).toFixed(1) : "0.0"; return [section, `${data.pointsAwarded.toFixed(1)} / ${data.maxPoints.toFixed(1)}`, `${percentage}%`]; });
     autoTable(doc, { startY: (doc).lastAutoTable.finalY + 10, head: [["Gathering Type", "Your Points", "Percentage (%)"]], body: tableRows, theme: 'grid', headStyles: { fillColor: [22, 160, 133] } });
-    doc.save(`My_Yearly_Report_${currentYear}_${user.name.replace(/\s+/g, '_')}.pdf`);
+
+    // Detailed Event Log
+    const recordsInYear = safeHistory.filter(event => new Date(event.date).getFullYear() === currentYear).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const detailedRows = recordsInYear.map(event => {
+      const myRecord = event.records.find(r => r.id === user.id);
+      const status = myRecord ? myRecord.status : 'Not Marked';
+      const reason = (status === 'Excused' || status === 'Excused but Present') ? myRecord.reason || '-' : '-';
+      return [
+        new Date(event.date).toLocaleDateString('en-GB'),
+        sanitizeText(event.section),
+        sanitizeText(event.eventName || '-'),
+        status,
+        sanitizeText(reason)
+      ];
+    });
+
+    if (detailedRows.length > 0) {
+      doc.setFontSize(14);
+      doc.text('Detailed Event Log', 14, doc.lastAutoTable.finalY + 15);
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 20,
+        head: [['Date', 'Event Type', 'Event Name', 'Status', 'Reason']],
+        body: detailedRows,
+        theme: 'grid',
+        headStyles: { fillColor: [75, 85, 99] }, // Slate-600
+        didParseCell: function (data) {
+          if (data.section === 'body' && data.column.index === 3) {
+            if (data.cell.raw === 'Absent') data.cell.styles.textColor = [220, 53, 69];
+            else if (data.cell.raw === 'Excused') data.cell.styles.textColor = [255, 193, 7];
+            else if (data.cell.raw === 'Present') data.cell.styles.textColor = [25, 135, 84];
+          }
+        }
+      });
+    }
+
+    doc.save(`My_Yearly_Report_${currentYear}_${sanitizeText(user.name).replace(/\s+/g, '_')}.pdf`);
   };
 
   const downloadMonthlyPdf = () => {
@@ -230,9 +319,9 @@ function MyStats({ user, history, teams = [], theme }) {
     const doc = new jsPDF();
     const recordsInMonth = safeHistory.filter(event => new Date(event.date).getFullYear() === selectedYear && new Date(event.date).getMonth() === parseInt(selectedMonth)).sort((a, b) => new Date(a.date) - new Date(b.date));
     doc.setFontSize(18); doc.text('Monthly Attendance Report', 14, 22); doc.setFontSize(14); doc.text(user.name, 14, 30); doc.setFontSize(11); doc.setTextColor(100); doc.text(`Report for: ${new Date(selectedYear, selectedMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}`, 14, 36);
-    const eventDetailsRows = recordsInMonth.map(event => { const myRecord = event.records.find(r => r.id === user.id); const status = myRecord ? myRecord.status : 'Not Marked'; const reason = (status === 'Excused' || status === 'Excused but Present') ? myRecord.reason || '-' : '-'; return [new Date(event.date).toLocaleDateString('en-GB'), event.section, event.eventName || '-', status, reason]; });
+    const eventDetailsRows = recordsInMonth.map(event => { const myRecord = event.records.find(r => r.id === user.id); const status = myRecord ? myRecord.status : 'Not Marked'; const reason = (status === 'Excused' || status === 'Excused but Present') ? myRecord.reason || '-' : '-'; return [new Date(event.date).toLocaleDateString('en-GB'), sanitizeText(event.section), sanitizeText(event.eventName || '-'), status, sanitizeText(reason)]; });
     autoTable(doc, { startY: 45, head: [['Date', 'Event Type', 'Event Name', 'My Status', 'Reason']], body: eventDetailsRows, theme: 'grid', headStyles: { fillColor: [13, 110, 253] } });
-    doc.save(`Monthly_Report_${user.name.replace(/\s+/g, '_')}_${selectedYear}_${parseInt(selectedMonth) + 1}.pdf`);
+    doc.save(`Monthly_Report_${sanitizeText(user.name).replace(/\s+/g, '_')}_${selectedYear}_${parseInt(selectedMonth) + 1}.pdf`);
   };
 
   const downloadAbsentExcusedPdf = () => {
@@ -247,10 +336,10 @@ function MyStats({ user, history, teams = [], theme }) {
         records.push({ date: event.date, eventType: event.section, eventName: event.eventName || '-', status: myRecord.status, reason: myRecord.status === 'Excused' ? (myRecord.reason || '-') : '-' });
       }
     });
-    const tableRows = records.sort((a, b) => new Date(b.date) - new Date(a.date)).map(record => [new Date(record.date).toLocaleDateString('en-GB'), record.eventType, record.eventName, record.status, record.reason]);
+    const tableRows = records.sort((a, b) => new Date(b.date) - new Date(a.date)).map(record => [new Date(record.date).toLocaleDateString('en-GB'), sanitizeText(record.eventType), sanitizeText(record.eventName), record.status, sanitizeText(record.reason)]);
 
     autoTable(doc, { startY: 50, head: [['Date', 'Event Type', 'Event Name', 'Status', 'Reason']], body: tableRows, theme: 'grid', headStyles: { fillColor: [220, 53, 69] }, didParseCell: function (data) { if (data.section === 'body' && data.column.index === 3) { if (data.cell.raw === 'Absent') data.cell.styles.fillColor = [255, 230, 230]; else if (data.cell.raw === 'Excused') data.cell.styles.fillColor = [255, 250, 205]; } } });
-    doc.save(`Absence_Excuse_Report_${user.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`Absence_Excuse_Report_${sanitizeText(user.name).replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
   };
 
   const availableYears = useMemo(() => {
@@ -454,6 +543,8 @@ function MyStats({ user, history, teams = [], theme }) {
                         if (e.myStatus === 'Absent') dotColor = 'bg-red-500';
                         else if (e.myStatus === 'Excused') dotColor = 'bg-amber-500';
                         else if (e.myStatus === 'Excused but Present') dotColor = 'bg-sky-500';
+                        else if (e.myStatus === 'Not Applicable') dotColor = 'bg-slate-400';
+                        else if (e.myStatus === 'Scheduled') dotColor = 'bg-indigo-500';
 
                         return (
                           <div
@@ -479,6 +570,7 @@ function MyStats({ user, history, teams = [], theme }) {
             <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-sky-500"></div><span className="text-xs text-slate-500 dark:text-slate-400">Excused Present</span></div>
             <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500"></div><span className="text-xs text-slate-500 dark:text-slate-400">Excused</span></div>
             <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-500"></div><span className="text-xs text-slate-500 dark:text-slate-400">Absent</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-slate-400"></div><span className="text-xs text-slate-500 dark:text-slate-400">Not Applicable</span></div>
           </div>
         </div>
 
@@ -503,8 +595,10 @@ function MyStats({ user, history, teams = [], theme }) {
               {selectedEntries.map((entry, idx) => (
                 <div key={idx} className="nock-card p-4 relative overflow-hidden group">
                   <div className={`absolute top-0 left-0 w-1 h-full ${entry.myStatus === 'Absent' ? 'bg-red-500' :
-                      entry.myStatus === 'Excused' ? 'bg-amber-500' :
-                        entry.myStatus === 'Excused but Present' ? 'bg-sky-500' : 'bg-emerald-500'
+                    entry.myStatus === 'Excused' ? 'bg-amber-500' :
+                      entry.myStatus === 'Excused but Present' ? 'bg-sky-500' :
+                        entry.myStatus === 'Not Applicable' ? 'bg-slate-400' :
+                          entry.myStatus === 'Scheduled' ? 'bg-indigo-500' : 'bg-emerald-500'
                     }`}></div>
 
                   <div className="pl-3">
@@ -514,7 +608,9 @@ function MyStats({ user, history, teams = [], theme }) {
                         ${entry.myStatus === 'Absent' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
                           entry.myStatus === 'Excused' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
                             entry.myStatus === 'Excused but Present' ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' :
-                              'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                              entry.myStatus === 'Not Applicable' ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' :
+                                entry.myStatus === 'Scheduled' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' :
+                                  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
                         }
                       `}>
                         {entry.myStatus}

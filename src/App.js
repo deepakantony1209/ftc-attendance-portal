@@ -19,6 +19,7 @@ import MemberReport from './components/MemberReport';
 import MyStats from './components/MyStats';
 import Profile from './components/Profile';
 import ManageTeams from './components/ManageTeams';
+import Schedule from './components/Schedule';
 import { generateRotationSchedule, getLastScheduledSunday } from './utils/scheduleUtils';
 import Layout from './components/Layout/Layout';
 
@@ -44,6 +45,7 @@ function AppContent() {
   const [bulkMarkingMode, setBulkMarkingMode] = useState('none');
   const [teamsLoading, setTeamsLoading] = useState(true);
   const [sundaySchedule, setSundaySchedule] = useState([]);
+  const [eventSchedules, setEventSchedules] = useState([]);
   const hasRedirectedOnLogin = useRef(false);
 
   // --- Theme Toggle State Management ---
@@ -117,7 +119,11 @@ function AppContent() {
       const schedules = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setSundaySchedule(schedules);
     });
-    return () => { membersUnsubscribe(); historyUnsubscribe(); teamsUnsubscribe(); scheduleUnsubscribe(); };
+    const eventScheduleUnsubscribe = onSnapshot(collection(db, 'eventSchedules'), (snapshot) => {
+      const schedules = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setEventSchedules(schedules);
+    });
+    return () => { membersUnsubscribe(); historyUnsubscribe(); teamsUnsubscribe(); scheduleUnsubscribe(); eventScheduleUnsubscribe(); };
   }, [loggedInUser]);
 
   // Email sync on login
@@ -324,6 +330,48 @@ function AppContent() {
     return `${year}-${month}-${day}`;
   };
 
+  // --- Event Schedule Management (Marriage Mass, etc.) ---
+  const handleAddEventSchedule = async (scheduleData) => {
+    try {
+      await addDoc(collection(db, 'eventSchedules'), {
+        ...scheduleData,
+        createdAt: new Date()
+      });
+      toast.success('Event schedule added successfully.');
+      return true;
+    } catch (error) {
+      console.error('Error adding event schedule:', error);
+      toast.error('Failed to add event schedule.');
+      return false;
+    }
+  };
+
+  const handleDeleteEventSchedule = async (scheduleId) => {
+    try {
+      await deleteDoc(doc(db, 'eventSchedules', scheduleId));
+      toast.success('Event schedule removed.');
+    } catch (error) {
+      console.error('Error deleting event schedule:', error);
+      toast.error('Failed to remove event schedule.');
+    }
+  };
+
+  const handleEditEventSchedule = async (scheduleId, updatedData) => {
+    try {
+      const scheduleRef = doc(db, 'eventSchedules', scheduleId);
+      await updateDoc(scheduleRef, {
+        ...updatedData,
+        modifiedAt: new Date()
+      });
+      toast.success('Event schedule updated successfully.');
+      return true;
+    } catch (error) {
+      console.error('Error updating event schedule:', error);
+      toast.error('Failed to update event schedule.');
+      return false;
+    }
+  };
+
   const formatDateForDisplay = (date) => {
     const d = typeof date === 'string' ? new Date(date) : date;
     return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
@@ -377,7 +425,10 @@ function AppContent() {
       setMembersForAttendance(prevMembers => prevMembers.map(member => ({ ...member, status: null, reason: '' })));
       toast.info('Attendance cleared.');
     } else {
-      const statusToSet = newMode === 'present' ? 'Present' : 'Absent';
+      let statusToSet = 'Present';
+      if (newMode === 'absent') statusToSet = 'Absent';
+      else if (newMode === 'na') statusToSet = 'Not Applicable';
+
       setMembersForAttendance(prevMembers =>
         prevMembers.map(member => !member.status ? { ...member, status: statusToSet, reason: '' } : member)
       );
@@ -437,19 +488,21 @@ function AppContent() {
             {loggedInUser.role === 'admin' ? (
               <>
                 <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} teams={teams} isLoading={historyLoading || membersLoading || teamsLoading} theme={theme} />} />
-                <Route path="/attendance" element={<AttendanceForm members={membersForAttendance} selectedDate={selectedDate} setSelectedDate={setSelectedDate} selectedSection={selectedSection} setSelectedSection={setSelectedSection} attendanceSections={attendanceSections} handleAttendance={handleAttendance} handleReasonChange={handleReasonChange} handleSave={handleSave} eventName={eventName} setEventName={setEventName} specialSections={specialSectionsRequiringName} isEditing={!!recordToEdit} onCancelEdit={handleCancelEdit} handleToggleBulkMarking={handleToggleBulkMarking} handleClearAttendance={handleClearAttendance} bulkMarkingMode={bulkMarkingMode} teams={teams} selectedScheduledTeam={selectedScheduledTeam} setSelectedScheduledTeam={setSelectedScheduledTeam} sundaySchedule={sundaySchedule} />} />
+                <Route path="/attendance" element={<AttendanceForm members={membersForAttendance} selectedDate={selectedDate} setSelectedDate={setSelectedDate} selectedSection={selectedSection} setSelectedSection={setSelectedSection} attendanceSections={attendanceSections} handleAttendance={handleAttendance} handleReasonChange={handleReasonChange} handleSave={handleSave} eventName={eventName} setEventName={setEventName} specialSections={specialSectionsRequiringName} isEditing={!!recordToEdit} onCancelEdit={handleCancelEdit} handleToggleBulkMarking={handleToggleBulkMarking} handleClearAttendance={handleClearAttendance} bulkMarkingMode={bulkMarkingMode} teams={teams} selectedScheduledTeam={selectedScheduledTeam} setSelectedScheduledTeam={setSelectedScheduledTeam} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} />} />
                 <Route path="/log" element={<AttendanceLog history={attendanceHistory} onDeleteRecord={handleDeleteRecord} onStartEdit={handleStartEdit} isReadOnly={false} isLoading={historyLoading} teams={teams} />} />
+                <Route path="/schedule" element={<Schedule user={loggedInUser} teams={teams} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} onGenerateSunday={handleGenerateSchedule} onUpdateSunday={handleUpdateScheduleEntry} onAddEvent={handleAddEventSchedule} onEditEvent={handleEditEventSchedule} onDeleteEvent={handleDeleteEventSchedule} isLoading={teamsLoading} />} />
                 <Route path="/statistics" element={<MemberReport attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} teams={teams} theme={theme} />} />
-                <Route path="/teams" element={<ManageTeams loggedInUser={loggedInUser} choirMembersList={choirMembers} teams={teams} onUpdateTeam={handleUpdateTeam} onCreateTeam={handleCreateTeam} onDeleteTeam={handleDeleteTeam} isReadOnly={false} isLoading={teamsLoading || membersLoading} sundaySchedule={sundaySchedule} onGenerateSchedule={handleGenerateSchedule} onUpdateScheduleEntry={handleUpdateScheduleEntry} />} />
+                <Route path="/teams" element={<ManageTeams loggedInUser={loggedInUser} choirMembersList={choirMembers} teams={teams} onUpdateTeam={handleUpdateTeam} onCreateTeam={handleCreateTeam} onDeleteTeam={handleDeleteTeam} isReadOnly={false} isLoading={teamsLoading || membersLoading} />} />
                 <Route path="/members" element={<ManageMembers members={choirMembers} onAddMember={handleAddNewMember} onEditMember={handleEditMember} onRemoveMember={handleRemoveMember} isReadOnly={false} isLoading={membersLoading} />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </>
             ) : (
               <>
                 <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} teams={teams} isLoading={historyLoading || membersLoading || teamsLoading} theme={theme} />} />
-                <Route path="/my-stats" element={<MyStats user={loggedInUser} history={attendanceHistory} teams={teams} theme={theme} />} />
+                <Route path="/my-stats" element={<MyStats user={loggedInUser} history={attendanceHistory} teams={teams} theme={theme} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} />} />
+                <Route path="/schedule" element={<Schedule user={loggedInUser} teams={teams} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} isLoading={teamsLoading} />} />
                 <Route path="/log" element={<AttendanceLog history={attendanceHistory} isReadOnly={true} isLoading={historyLoading} teams={teams} />} />
-                <Route path="/teams" element={<ManageTeams choirMembersList={choirMembers} teams={teams} isReadOnly={true} isLoading={teamsLoading || membersLoading} sundaySchedule={sundaySchedule} />} />
+                <Route path="/teams" element={<ManageTeams choirMembersList={choirMembers} teams={teams} isReadOnly={true} isLoading={teamsLoading || membersLoading} />} />
                 <Route path="/members" element={<ManageMembers members={choirMembers} isReadOnly={true} isLoading={membersLoading} />} />
                 <Route path="/profile" element={<Profile user={loggedInUser} onUpdateProfile={handleUpdateProfile} />} />
                 <Route path="*" element={<Navigate to="/" />} />
@@ -463,28 +516,30 @@ function AppContent() {
       {showLogoutConfirm && (
         <div className="modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
           <div className="modal-content max-w-sm" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6">
+            <div className="p-6 flex-1">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
-                  <i className="bi bi-box-arrow-right text-red-600 dark:text-red-400"></i>
+                <div className="w-12 h-12 rounded-2xl bg-coral-100 dark:bg-coral-900/30 flex items-center justify-center flex-shrink-0">
+                  <i className="bi bi-box-arrow-right text-coral-500 dark:text-coral-400 text-xl"></i>
                 </div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-white">Confirm Log Out</h3>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-white">Confirm Log Out</h3>
+                  <p className="text-sm text-slate-500 dark:text-navy-300">Are you sure you want to end your session?</p>
+                </div>
               </div>
-              <p className="text-slate-600 dark:text-slate-400 mb-6">Are you sure you want to log out?</p>
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setShowLogoutConfirm(false)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 shadow-sm transition-colors"
-                >
-                  Log Out
-                </button>
-              </div>
+            </div>
+            <div className="flex gap-3 justify-end p-4 border-t border-slate-100 dark:border-navy-700 bg-slate-50 dark:!bg-navy-900 rounded-b-3xl">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 dark:text-navy-300 dark:bg-navy-800 dark:hover:bg-navy-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white bg-coral-500 hover:bg-coral-600 shadow-lg shadow-coral-500/20 transition-all hover:-translate-y-0.5"
+              >
+                Log Out
+              </button>
             </div>
           </div>
         </div>

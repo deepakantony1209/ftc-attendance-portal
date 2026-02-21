@@ -8,11 +8,12 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pointValues, statusMultipliers } from './ScoreLogic';
 
+import { sanitizeText } from '../utils/pdfUtils';
+
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title);
 
 // ─── Compute yearly stats for a single member ───────────────────────────────
 function computeStats(member, attendanceHistory, teams) {
-  const userSundayTeam = teams.find(t => t.type === 'sunday' && t.members.includes(member.id));
   const currentYear = new Date().getFullYear();
   const relevantHistory = attendanceHistory.filter(
     event => pointValues.hasOwnProperty(event.section) && new Date(event.date).getFullYear() === currentYear
@@ -34,8 +35,10 @@ function computeStats(member, attendanceHistory, teams) {
       if (!sectionData[sectionName]) sectionData[sectionName] = { pointsAwarded: 0, maxPoints: 0 };
       const maxPointsForEvent = pointValues[sectionName] || 0;
 
-      if (event.section === 'Sunday evening mass' && event.scheduledTeamId) {
-        if (event.scheduledTeamId !== userSundayTeam?.id) {
+      if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+        const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+        const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(member.id));
+        if (!isMyTeamScheduled) {
           if (myRecord.status === 'Present' || myRecord.status === 'Excused but Present') {
             totalMaxPoints += maxPointsForEvent;
             sectionData[sectionName].maxPoints += maxPointsForEvent;
@@ -47,6 +50,7 @@ function computeStats(member, attendanceHistory, teams) {
         }
       }
 
+      if (myRecord.status === 'Not Applicable') return; // Fully excluded from percentage
       totalMaxPoints += maxPointsForEvent;
       sectionData[sectionName].maxPoints += maxPointsForEvent;
       let effectiveStatus = myRecord.status;
@@ -209,12 +213,50 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
     const currentYear = new Date().getFullYear();
     const doc = new jsPDF();
     doc.setFontSize(18); doc.text(`Attendance Report - ${currentYear}`, 14, 22);
-    doc.setFontSize(14); doc.text(member.name, 14, 30);
+    doc.setFontSize(14); doc.text(sanitizeText(member.name), 14, 30);
     const summaryBody = [[`Attendance % (${currentYear})`, `${stats.percentage}%`], ['Total Points Earned', `${stats.totalPointsAwarded} / ${stats.totalMaxPoints}`], ['Excused Absences', stats.excusedCount], ['Excuse Balance', `${Math.max(0, 24 - stats.excusedCount)} / 24`], ['Excused but Present', stats.excusedPresentCount]];
     autoTable(doc, { startY: 40, head: [['Current Year Summary', 'Value']], body: summaryBody, theme: 'striped', headStyles: { fillColor: [55, 114, 255] } });
-    const tableRows = Object.entries(stats.sectionData).map(([section, data]) => { const pct = data.maxPoints > 0 ? ((data.pointsAwarded / data.maxPoints) * 100).toFixed(1) : '0.0'; return [section, `${data.pointsAwarded.toFixed(1)} / ${data.maxPoints.toFixed(1)}`, `${pct}%`]; });
+    const tableRows = Object.entries(stats.sectionData).map(([section, data]) => { const pct = data.maxPoints > 0 ? ((data.pointsAwarded / data.maxPoints) * 100).toFixed(1) : '0.0'; return [sanitizeText(section), `${data.pointsAwarded.toFixed(1)} / ${data.maxPoints.toFixed(1)}`, `${pct}%`]; });
     if (tableRows.length > 0) autoTable(doc, { startY: doc.lastAutoTable.finalY + 10, head: [['Gathering Type Breakdown', 'Points', 'Percentage (%)']], body: tableRows, theme: 'grid', headStyles: { fillColor: [22, 160, 133] } });
-    doc.save(`Yearly_Report_${currentYear}_${member.name.replace(/\s+/g, '_')}.pdf`);
+
+    // Detailed Event Log
+    const recordsInYear = attendanceHistory.filter(e => new Date(e.date).getFullYear() === currentYear).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const detailedRows = [];
+    recordsInYear.forEach(event => {
+      const myRecord = event.records.find(r => r.id === member.id);
+      if (myRecord) {
+        const status = myRecord.status || 'Not Marked';
+        const reason = (status === 'Excused' || status === 'Excused but Present') ? myRecord.reason || '-' : '-';
+        detailedRows.push([
+          new Date(event.date).toLocaleDateString('en-GB'),
+          sanitizeText(event.section),
+          sanitizeText(event.eventName || '-'),
+          status,
+          sanitizeText(reason)
+        ]);
+      }
+    });
+
+    if (detailedRows.length > 0) {
+      doc.setFontSize(14);
+      doc.text('Detailed Event Log', 14, doc.lastAutoTable.finalY + 15);
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 20,
+        head: [['Date', 'Event Type', 'Event Name', 'Status', 'Reason']],
+        body: detailedRows,
+        theme: 'grid',
+        headStyles: { fillColor: [75, 85, 99] }, // Slate-600
+        didParseCell: function (data) {
+          if (data.section === 'body' && data.column.index === 3) {
+            if (data.cell.raw === 'Absent') data.cell.styles.textColor = [220, 53, 69];
+            else if (data.cell.raw === 'Excused') data.cell.styles.textColor = [255, 193, 7];
+            else if (data.cell.raw === 'Present') data.cell.styles.textColor = [25, 135, 84];
+          }
+        }
+      });
+    }
+
+    doc.save(`Yearly_Report_${currentYear}_${sanitizeText(member.name).replace(/\s+/g, '_')}.pdf`);
   };
 
   const downloadMonthlyPdf = () => {
@@ -222,11 +264,11 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
     const doc = new jsPDF();
     const monthName = new Date(selectedYear, selectedMonth).toLocaleString('default', { month: 'long', year: 'numeric' });
     doc.setFontSize(18); doc.text('Monthly Attendance Report', 14, 22);
-    doc.setFontSize(14); doc.text(member.name, 14, 30);
+    doc.setFontSize(14); doc.text(sanitizeText(member.name), 14, 30);
     doc.setFontSize(11); doc.setTextColor(100); doc.text(`Report for: ${monthName}`, 14, 36);
     const summaryBody = [['Overall Attendance', `${monthlyYearlyStats.percentage}%`], ['Excused Absences', monthlyYearlyStats.excusesUsed], ['Excuse Balance', `${monthlyYearlyStats.excuseBalance} / 2`]];
     autoTable(doc, { startY: 45, head: [['Monthly Summary', 'Value']], body: summaryBody, theme: 'striped' });
-    doc.save(`Monthly_Report_${member.name.replace(/\s+/g, '_')}_${selectedYear}_${parseInt(selectedMonth) + 1}.pdf`);
+    doc.save(`Monthly_Report_${sanitizeText(member.name).replace(/\s+/g, '_')}_${selectedYear}_${parseInt(selectedMonth) + 1}.pdf`);
   };
 
   return (
@@ -379,12 +421,9 @@ function MemberReport({ attendanceHistory, choirMembersList, isLoading, teams = 
                   </div>
 
                   {/* Name + progress */}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-slate-800 dark:text-white text-sm truncate">{member.name}</span>
-                      {member.gender && (
-                        <i className={`bi ${member.gender === 'Male' ? 'bi-gender-male text-sky-400' : 'bi-gender-female text-amber-400'} text-xs flex-shrink-0`}></i>
-                      )}
+                      <span className="font-semibold text-slate-800 dark:text-white text-sm">{member.name}</span>
                     </div>
                     <ProgressBar pct={stats.percentage} />
                   </div>

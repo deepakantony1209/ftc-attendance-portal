@@ -104,27 +104,54 @@ const notifyTeam = async (teamId, title, body) => {
     }
 }
 
+// Helper: Check if today is matching DD-MM
+const isToday = (dateStr) => {
+    if (!dateStr) return false;
+    const today = new Date();
+    const tMonth = String(today.getMonth() + 1).padStart(2, '0');
+    const tDay = String(today.getDate()).padStart(2, '0');
+
+    // Assumes YYYY-MM-DD
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+        return parts[1] === tMonth && parts[2] === tDay;
+    }
+    return false;
+};
+
 // 2. Birthday & Anniversary Notifications (Runs daily at 8:00 AM)
 cron.schedule('0 8 * * *', async () => {
     console.log('Running daily birthday/anniversary check...');
     const today = new Date();
-    // In a real implementation you would format today's date and query members
-    // matching birthday/anniversary fields, then send FCM messages.
-    // Example:
-    /*
-    const snapshot = await db.collection('choirMembers').get();
-    snapshot.forEach(async (doc) => {
-        const data = doc.data();
-        const fcmToken = data.fcmToken;
-        if(fcmToken) {
-            // Check if today matches data.dob or if it's Valentine's Day
-            if (today.getMonth() === 1 && today.getDate() === 14) { // Feb 14
-                 await sendPushNotification(fcmToken, "Happy Valentine's Day!", "Wishing you love and joy from FTC!");
+    const isValentinesDay = today.getMonth() === 1 && today.getDate() === 14;
+
+    try {
+        const membersSnapshot = await db.collection('choirMembers').get();
+
+        for (const doc of membersSnapshot.docs) {
+            const data = doc.data();
+            const fcmToken = data.fcmToken;
+
+            if (fcmToken) {
+                // Valentine's Day
+                if (isValentinesDay) {
+                    await sendPushNotification(fcmToken, "Happy Valentine's Day! ❤️", "Wishing you a day filled with love and joy from FTC!");
+                }
+
+                // Birthdays
+                if (isToday(data.dob)) {
+                    await sendPushNotification(fcmToken, "Happy Birthday! 🎂", `Wishing you a fantastic birthday, ${data.name}! From all of us at FTC.`);
+                }
+
+                // Wedding Anniversaries
+                if (data.maritalStatus === 'Married' && isToday(data.weddingDate)) {
+                    await sendPushNotification(fcmToken, "Happy Anniversary! 🎉", `Wishing you a wonderful wedding anniversary, ${data.name}!`);
+                }
             }
-            // if (isBirthday(data.dob)) { sendPushNotification(...) }
         }
-    });
-    */
+    } catch (err) {
+        console.error('Error in daily notifications:', err);
+    }
 });
 
 // 3. Event Reminders (Runs every 15 minutes checking for events 1hr and 30m away)
@@ -133,45 +160,95 @@ cron.schedule('*/15 * * * *', async () => {
     const now = new Date();
     const todayStr = formatDate(now);
 
-    // Check Sunday Schedules for today
+    const checkEvent = async (schedule, eventTypeStr, isSunday = false) => {
+        if (!schedule || !schedule.time || !schedule.teamId) return;
+
+        // Parse schedule.time (e.g. "17:00")
+        const [hours, mins] = schedule.time.split(':').map(Number);
+        const eventTime = new Date(now);
+        eventTime.setHours(hours, mins, 0, 0);
+
+        const diffMins = Math.floor((eventTime - now) / 60000);
+
+        // We want exactly 1 hour (between 45-60) and 30 mins (between 15-30)
+        if (diffMins > 45 && diffMins <= 60) {
+            await notifyTeam(schedule.teamId, `Reminder: ${eventTypeStr} in 1 Hour`, `Please get ready. (${schedule.time})`);
+        } else if (diffMins > 15 && diffMins <= 30) {
+            await notifyTeam(schedule.teamId, `Reminder: ${eventTypeStr} in 30 Minutes`, `Please gather for setup. (${schedule.time})`);
+        }
+    };
+
     try {
+        // 1. Check Sunday Schedule
         const sundayDoc = await db.collection('sundaySchedule').doc(todayStr).get();
         if (sundayDoc.exists) {
-            const schedule = sundayDoc.data();
-            // Assuming Evening Mass is at 17:00 (5 PM)
-            const eventTime = new Date();
-            eventTime.setHours(17, 0, 0, 0);
-
-            const diffMs = eventTime - now;
-            const diffMins = Math.floor(diffMs / 60000);
-
-            if (diffMins > 45 && diffMins <= 60) {
-                await notifyTeam(schedule.teamId, "Reminder: Sunday Evening Mass in 1 Hour", `Your team (${schedule.teamName}) is scheduled for today's mass.`);
-            } else if (diffMins > 15 && diffMins <= 30) {
-                await notifyTeam(schedule.teamId, "Reminder: Sunday Evening Mass in 30 Minutes", "Please be ready for setup.");
-            }
+            await checkEvent(sundayDoc.data(), "Sunday Evening Mass", true);
         }
-    } catch (err) {
-        console.error('Error checking Sunday schedule:', err);
-    }
 
-    // You would add similar logic querying `eventSchedules` checking `time` fields.
+        // 2. Check Event Schedules for today
+        const eventsSnapshot = await db.collection('eventSchedules').where('date', '==', todayStr).get();
+        eventsSnapshot.forEach(async (doc) => {
+            const evt = doc.data();
+            await checkEvent(evt, evt.type || "Special Event", false);
+        });
+
+    } catch (err) {
+        console.error('Error checking reminders:', err);
+    }
 });
 
 // 4. Monthly Attendance Summary (Runs on the 1st of every month at 10:00 AM)
 cron.schedule('0 10 1 * *', async () => {
     console.log('Running monthly attendance summary...');
-    // Calculate last month's stats and send to each member
-    /*
-    const snapshot = await db.collection('choirMembers').get();
-    snapshot.forEach(async (doc) => {
-        const data = doc.data();
-        if (data.fcmToken) {
-             const percentage = calculatePercentageForMember(doc.id, lastMonth);
-             await sendPushNotification(data.fcmToken, "Monthly Attendance Summary", `Your attendance for last month was ${percentage}%.`);
+    try {
+        const lastMonthDate = new Date();
+        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1); // Go back one month
+
+        const year = lastMonthDate.getFullYear();
+        const month = String(lastMonthDate.getMonth() + 1).padStart(2, '0');
+        const monthPrefix = `${year}-${month}`; // e.g. "2026-02"
+
+        // Fetch last month's attendance
+        const attendanceSnapshot = await db.collection('attendanceHistory')
+            .where('date', '>=', `${monthPrefix}-01`)
+            .where('date', '<=', `${monthPrefix}-31`)
+            .get();
+
+        const memberStats = {};
+
+        attendanceSnapshot.forEach(doc => {
+            const data = doc.data();
+            const isCountable = data.scheduledTeamId !== 'na-team';
+            if (!isCountable) return;
+
+            data.records.forEach(rc => {
+                if (!memberStats[rc.id]) {
+                    memberStats[rc.id] = { presentCount: 0, totalCount: 0 };
+                }
+                if (rc.status !== 'Not Applicable') {
+                    memberStats[rc.id].totalCount++;
+                    if (rc.status === 'Present' || rc.status === 'Excused but Present') {
+                        memberStats[rc.id].presentCount++;
+                    }
+                }
+            });
+        });
+
+        const membersSnapshot = await db.collection('choirMembers').get();
+        for (const doc of membersSnapshot.docs) {
+            const user = doc.data();
+            if (user.fcmToken && memberStats[doc.id]) {
+                const stats = memberStats[doc.id];
+                if (stats.totalCount > 0) {
+                    const percentage = Math.round((stats.presentCount / stats.totalCount) * 100);
+                    const monthName = lastMonthDate.toLocaleString('default', { month: 'long' });
+                    await sendPushNotification(user.fcmToken, "Monthly Attendance Summary", `Your attendance for ${monthName} was ${percentage}%. (${stats.presentCount}/${stats.totalCount} events)`);
+                }
+            }
         }
-    });
-    */
+    } catch (err) {
+        console.error('Error calculating monthly summaries:', err);
+    }
 });
 
 

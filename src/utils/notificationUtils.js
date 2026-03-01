@@ -4,7 +4,7 @@ import { db, messaging } from '../firebase';
 
 // You will need to replace this with your VAPID Key from Firebase Console -> Project Settings -> Cloud Messaging -> Web Push certificates
 // For testing locally without it, getToken might still work but it's highly recommended.
-const VAPID_KEY = 'YOUR_VAPID_KEY_HERE';
+const VAPID_KEY = 'BN2Ng1L1r-KqX6LLh6EVUX4YuI-o3DiPWTKzD80F7yEEAamuRcbPH-mLj2SS50yCI-RjCfDJ3c6zn-5slk_hzQY';
 
 export const requestNotificationPermissionAndSaveToken = async (userId) => {
     if (!messaging) return;

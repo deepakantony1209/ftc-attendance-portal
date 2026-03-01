@@ -464,7 +464,7 @@ function AppContent() {
       toast.success('Attendance saved.');
       // Trigger Push Notifications via Backend
       try {
-        fetch('http://localhost:5000/api/notify-attendance', {
+        fetch('https://ftc-attendance-portal.onrender.com/api/notify-attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(recordPayload)

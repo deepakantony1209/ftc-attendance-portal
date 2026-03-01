@@ -5,7 +5,19 @@ const cors = require('cors');
 const cron = require('node-cron');
 
 // Initialize Firebase Admin
-const serviceAccount = require('./serviceAccountKey.json');
+let serviceAccount;
+try {
+    // First try to load from local file (for local development)
+    serviceAccount = require('./serviceAccountKey.json');
+} catch (error) {
+    // If local file is missing (e.g., on Render), parse from Environment Variable
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } else {
+        throw new Error('Missing FIREBASE_SERVICE_ACCOUNT environment variable or serviceAccountKey.json file');
+    }
+}
+
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });

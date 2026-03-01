@@ -20,8 +20,10 @@ import MyStats from './components/MyStats';
 import Profile from './components/Profile';
 import ManageTeams from './components/ManageTeams';
 import Schedule from './components/Schedule';
+import HowToUse from './components/HowToUse';
 import { generateRotationSchedule, getLastScheduledSunday } from './utils/scheduleUtils';
 import Layout from './components/Layout/Layout';
+import { requestNotificationPermissionAndSaveToken } from './utils/notificationUtils';
 
 const specialSectionsRequiringName = ['Special mass practice', 'Special mass', 'Others'];
 
@@ -35,6 +37,7 @@ function AppContent() {
   const [selectedSection, setSelectedSection] = useState('');
   const [teams, setTeams] = useState([]);
   const [eventName, setEventName] = useState('');
+  const [eventTime, setEventTime] = useState('');
   const [selectedScheduledTeam, setSelectedScheduledTeam] = useState('');
   const [recordToEdit, setRecordToEdit] = useState(null);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -84,6 +87,8 @@ function AppContent() {
         const userProfileDoc = await getDoc(userProfileRef);
         if (userProfileDoc.exists()) {
           setLoggedInUser({ id: userProfileDoc.id, uid: user.uid, role: 'user', ...userProfileDoc.data() });
+          // Request token on successful login
+          requestNotificationPermissionAndSaveToken(userProfileDoc.id);
         } else if (user.email === 'fathimatamilchoir@gmail.com') {
           setLoggedInUser({ uid: user.uid, email: user.email, name: 'Admin', role: 'admin' });
         } else {
@@ -151,6 +156,7 @@ function AppContent() {
       setSelectedDate(recordToEdit.date);
       setSelectedSection(recordToEdit.section);
       setEventName(recordToEdit.eventName || '');
+      setEventTime(recordToEdit.time || '');
       setSelectedScheduledTeam(recordToEdit.scheduledTeamId || '');
       const attendanceMap = new Map(recordToEdit.records.map(r => [r.id, { status: r.status, reason: r.reason }]));
       setMembersForAttendance(choirMembers.map(member => ({
@@ -446,6 +452,7 @@ function AppContent() {
     if (invalidExcuse) { toast.error(`Please provide a reason for the excused status for ${invalidExcuse.name}.`); return; }
     const recordPayload = {
       date: selectedDate, section: selectedSection,
+      time: eventTime || null,
       eventName: specialSectionsRequiringName.includes(selectedSection) ? eventName.trim() : '',
       scheduledTeamId: selectedSection === 'Sunday evening mass' ? selectedScheduledTeam : null,
       records: markedMembers.map(({ id, name, status, reason }) => ({ id, name, status, reason })),
@@ -455,12 +462,33 @@ function AppContent() {
     } else {
       await addDoc(collection(db, 'attendanceHistory'), recordPayload);
       toast.success('Attendance saved.');
+      // Trigger Push Notifications via Backend
+      try {
+        fetch('http://localhost:5000/api/notify-attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(recordPayload)
+        }).catch(err => console.error('Failed to trigger notifications:', err));
+      } catch (err) {
+        console.error('Failed to initiate notification fetch:', err);
+      }
     }
     setRecordToEdit(null);
     setEventName('');
+    setEventTime('');
     setSelectedScheduledTeam('');
     setSelectedDate(new Date().toISOString().slice(0, 10));
     setSelectedSection('Daily mass');
+  };
+
+  const handleMarkAttendanceFromSchedule = (event) => {
+    setSelectedDate(event.date);
+    setSelectedSection(event.type);
+    setEventName(event.name || '');
+    setEventTime(event.time || '');
+    setSelectedScheduledTeam(event.teamId || '');
+    setRecordToEdit(null);
+    navigate('/attendance');
   };
 
   const attendanceSections = [
@@ -488,23 +516,25 @@ function AppContent() {
             {loggedInUser.role === 'admin' ? (
               <>
                 <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} teams={teams} isLoading={historyLoading || membersLoading || teamsLoading} theme={theme} />} />
-                <Route path="/attendance" element={<AttendanceForm members={membersForAttendance} selectedDate={selectedDate} setSelectedDate={setSelectedDate} selectedSection={selectedSection} setSelectedSection={setSelectedSection} attendanceSections={attendanceSections} handleAttendance={handleAttendance} handleReasonChange={handleReasonChange} handleSave={handleSave} eventName={eventName} setEventName={setEventName} specialSections={specialSectionsRequiringName} isEditing={!!recordToEdit} onCancelEdit={handleCancelEdit} handleToggleBulkMarking={handleToggleBulkMarking} handleClearAttendance={handleClearAttendance} bulkMarkingMode={bulkMarkingMode} teams={teams} selectedScheduledTeam={selectedScheduledTeam} setSelectedScheduledTeam={setSelectedScheduledTeam} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} />} />
+                <Route path="/attendance" element={<AttendanceForm members={membersForAttendance} selectedDate={selectedDate} setSelectedDate={setSelectedDate} selectedSection={selectedSection} setSelectedSection={setSelectedSection} attendanceSections={attendanceSections} handleAttendance={handleAttendance} handleReasonChange={handleReasonChange} handleSave={handleSave} eventName={eventName} setEventName={setEventName} eventTime={eventTime} setEventTime={setEventTime} specialSections={specialSectionsRequiringName} isEditing={!!recordToEdit} onCancelEdit={handleCancelEdit} handleToggleBulkMarking={handleToggleBulkMarking} handleClearAttendance={handleClearAttendance} bulkMarkingMode={bulkMarkingMode} teams={teams} selectedScheduledTeam={selectedScheduledTeam} setSelectedScheduledTeam={setSelectedScheduledTeam} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} />} />
                 <Route path="/log" element={<AttendanceLog history={attendanceHistory} onDeleteRecord={handleDeleteRecord} onStartEdit={handleStartEdit} isReadOnly={false} isLoading={historyLoading} teams={teams} />} />
-                <Route path="/schedule" element={<Schedule user={loggedInUser} teams={teams} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} onGenerateSunday={handleGenerateSchedule} onUpdateSunday={handleUpdateScheduleEntry} onAddEvent={handleAddEventSchedule} onEditEvent={handleEditEventSchedule} onDeleteEvent={handleDeleteEventSchedule} isLoading={teamsLoading} />} />
+                <Route path="/schedule" element={<Schedule user={loggedInUser} teams={teams} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} onGenerateSunday={handleGenerateSchedule} onUpdateSunday={handleUpdateScheduleEntry} onAddEvent={handleAddEventSchedule} onEditEvent={handleEditEventSchedule} onDeleteEvent={handleDeleteEventSchedule} onMarkAttendance={handleMarkAttendanceFromSchedule} isLoading={teamsLoading} />} />
                 <Route path="/statistics" element={<MemberReport attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} teams={teams} theme={theme} />} />
                 <Route path="/teams" element={<ManageTeams loggedInUser={loggedInUser} choirMembersList={choirMembers} teams={teams} onUpdateTeam={handleUpdateTeam} onCreateTeam={handleCreateTeam} onDeleteTeam={handleDeleteTeam} isReadOnly={false} isLoading={teamsLoading || membersLoading} />} />
                 <Route path="/members" element={<ManageMembers members={choirMembers} onAddMember={handleAddNewMember} onEditMember={handleEditMember} onRemoveMember={handleRemoveMember} isReadOnly={false} isLoading={membersLoading} />} />
+                <Route path="/how-to-use" element={<HowToUse user={loggedInUser} />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </>
             ) : (
               <>
                 <Route path="/" element={<Dashboard user={loggedInUser} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} teams={teams} isLoading={historyLoading || membersLoading || teamsLoading} theme={theme} />} />
                 <Route path="/my-stats" element={<MyStats user={loggedInUser} history={attendanceHistory} teams={teams} theme={theme} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} />} />
-                <Route path="/schedule" element={<Schedule user={loggedInUser} teams={teams} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} isLoading={teamsLoading} />} />
+                <Route path="/schedule" element={<Schedule user={loggedInUser} teams={teams} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={teamsLoading} />} />
                 <Route path="/log" element={<AttendanceLog history={attendanceHistory} isReadOnly={true} isLoading={historyLoading} teams={teams} />} />
                 <Route path="/teams" element={<ManageTeams choirMembersList={choirMembers} teams={teams} isReadOnly={true} isLoading={teamsLoading || membersLoading} />} />
                 <Route path="/members" element={<ManageMembers members={choirMembers} isReadOnly={true} isLoading={membersLoading} />} />
                 <Route path="/profile" element={<Profile user={loggedInUser} onUpdateProfile={handleUpdateProfile} />} />
+                <Route path="/how-to-use" element={<HowToUse user={loggedInUser} />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </>
             )}

@@ -7,14 +7,13 @@ function AttendanceForm({
   members,
   selectedDate, setSelectedDate, selectedSection, setSelectedSection,
   attendanceSections, handleAttendance, handleReasonChange, handleSave,
-  eventName, setEventName, specialSections,
+  eventName, setEventName, eventTime, setEventTime, specialSections,
   isEditing, onCancelEdit,
   handleToggleBulkMarking, handleClearAttendance, bulkMarkingMode,
   teams, selectedScheduledTeam, setSelectedScheduledTeam,
   sundaySchedule = [], eventSchedules = []
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [eventTime, setEventTime] = useState('');
   const [openPanels, setOpenPanels] = useState({ male: false, female: false });
 
   const isSectionDisabled = !selectedDate;
@@ -27,13 +26,28 @@ function AttendanceForm({
     return '';
   };
 
-  const { maleMembers, femaleMembers } = useMemo(() => {
+  const { maleMembers, femaleMembers, maleCounts, femaleCounts } = useMemo(() => {
     const filtered = members.filter(member =>
       member.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    const calcCounts = (list) => {
+      return list.reduce((acc, m) => {
+        if (m.status === 'Present' || m.status === 'Excused but Present') acc.present++;
+        else if (m.status === 'Absent' || m.status === 'Excused') acc.absent++;
+        else if (m.status === 'Not Applicable') acc.na++;
+        return acc;
+      }, { present: 0, absent: 0, na: 0 });
+    };
+
+    const mm = filtered.filter(m => m.gender === 'Male').sort((a, b) => a.name.localeCompare(b.name));
+    const fm = filtered.filter(m => m.gender === 'Female').sort((a, b) => a.name.localeCompare(b.name));
+
     return {
-      maleMembers: filtered.filter(m => m.gender === 'Male').sort((a, b) => a.name.localeCompare(b.name)),
-      femaleMembers: filtered.filter(m => m.gender === 'Female').sort((a, b) => a.name.localeCompare(b.name)),
+      maleMembers: mm,
+      femaleMembers: fm,
+      maleCounts: calcCounts(mm),
+      femaleCounts: calcCounts(fm)
     };
   }, [members, searchTerm]);
 
@@ -49,17 +63,21 @@ function AttendanceForm({
       const dateObj = new Date(selectedDate);
       if (dateObj.getDay() === 0) {
         const schedule = sundaySchedule.find(s => s.date === selectedDate);
-        if (schedule && schedule.teamId) setSelectedScheduledTeam(schedule.teamId);
+        if (schedule) {
+          if (schedule.name) setEventName(schedule.name);
+          if (schedule.teamId) setSelectedScheduledTeam(schedule.teamId);
+          if (schedule.time) setEventTime(schedule.time);
+        }
       }
-    } else if (selectedDate && selectedSection === 'Marriage mass' && eventSchedules && eventSchedules.length > 0) {
-      const schedule = eventSchedules.find(s => s.date === selectedDate && s.type === 'Marriage mass');
+    } else if (selectedDate && selectedSection && eventSchedules && eventSchedules.length > 0) {
+      const schedule = eventSchedules.find(s => s.date === selectedDate && s.type === selectedSection);
       if (schedule) {
         if (schedule.name) setEventName(schedule.name);
         if (schedule.teamId) setSelectedScheduledTeam(schedule.teamId);
         if (schedule.time) setEventTime(schedule.time);
       }
     }
-  }, [selectedDate, selectedSection, sundaySchedule, eventSchedules, setSelectedScheduledTeam, setEventName]);
+  }, [selectedDate, selectedSection, sundaySchedule, eventSchedules, setSelectedScheduledTeam, setEventName, setEventTime]);
 
   const renderMemberList = (memberList, gender) => {
     if (memberList.length === 0) {
@@ -83,12 +101,12 @@ function AttendanceForm({
             disabled={isContentDisabled}
             className={`form-select min-w-[160px] w-auto text-sm font-medium ${getStatusClasses(member.status)}`}
           >
-            <option value="" disabled>Mark Attendance</option>
-            <option value="Present">Present</option>
-            <option value="Absent">Absent</option>
-            <option value="Excused but Present">Excused but Present</option>
-            <option value="Excused">Excused</option>
-            <option value="Not Applicable">Not Applicable</option>
+            <option value="" disabled className="bg-white dark:bg-slate-800 text-slate-400">Mark Attendance</option>
+            <option value="Present" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">Present</option>
+            <option value="Absent" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">Absent</option>
+            <option value="Excused but Present" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">Excused but Present</option>
+            <option value="Excused" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">Excused</option>
+            <option value="Not Applicable" className="bg-white dark:bg-slate-800 text-slate-800 dark:text-white">Not Applicable</option>
           </select>
           {(member.status === 'Excused' || member.status === 'Excused but Present') && (
             <input
@@ -110,6 +128,29 @@ function AttendanceForm({
     setOpenPanels(prev => ({ ...prev, [panel]: !prev[panel] }));
   };
 
+  const renderStatusSummary = (counts) => {
+    if (counts.present === 0 && counts.absent === 0 && counts.na === 0) return null;
+    return (
+      <div className="flex items-center gap-1.5 ml-2 mr-1">
+        {counts.present > 0 && (
+          <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20">
+            {counts.present} Present
+          </span>
+        )}
+        {counts.absent > 0 && (
+          <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-500/10 text-[10px] font-bold text-red-600 dark:text-red-400 border border-red-100 dark:border-red-500/20">
+            {counts.absent} Absent
+          </span>
+        )}
+        {counts.na > 0 && (
+          <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-slate-50 dark:bg-slate-500/10 text-[10px] font-bold text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-500/20">
+            {counts.na} NA
+          </span>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       <PageHeader
@@ -120,10 +161,14 @@ function AttendanceForm({
       {/* Date & Section Selector */}
       <Card className="mb-5">
         <Card.Body>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="form-label">Select Date</label>
               <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} required className="form-input" />
+            </div>
+            <div>
+              <label className="form-label">Time</label>
+              <input type="time" value={eventTime || ''} onChange={(e) => setEventTime(e.target.value)} className="form-input font-mono w-full" />
             </div>
             <div>
               <label className="form-label">Activity Type</label>
@@ -199,6 +244,7 @@ function AttendanceForm({
                 <span className="font-bold text-slate-800 dark:text-slate-200">Men</span>
               </div>
               <div className="flex items-center gap-2">
+                {renderStatusSummary(maleCounts)}
                 <span className="text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{maleMembers.length}</span>
                 <i className={`bi bi-chevron-${openPanels.male ? 'up' : 'down'} text-slate-400`}></i>
               </div>
@@ -217,6 +263,7 @@ function AttendanceForm({
                 <span className="font-bold text-slate-800 dark:text-slate-200">Women</span>
               </div>
               <div className="flex items-center gap-2">
+                {renderStatusSummary(femaleCounts)}
                 <span className="text-xs font-bold bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{femaleMembers.length}</span>
                 <i className={`bi bi-chevron-${openPanels.female ? 'up' : 'down'} text-slate-400`}></i>
               </div>

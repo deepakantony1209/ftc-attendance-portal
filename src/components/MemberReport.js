@@ -124,7 +124,6 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
   }, [attendanceHistory]);
 
   const monthlyYearlyStats = useMemo(() => {
-    const userSundayTeam = teams.find(t => t.type === 'sunday' && t.members.includes(member.id));
     const recordsInYear = attendanceHistory.filter(e => new Date(e.date).getFullYear() === selectedYear);
     if (selectedMonth === 'all') {
       const myRecordsInYear = recordsInYear.flatMap(e => e.records.filter(r => r.id === member.id));
@@ -135,8 +134,10 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
         const myRecord = event.records.find(r => r.id === member.id);
         if (myRecord && pointValues[event.section]) {
           const maxPts = pointValues[event.section];
-          if (event.section === 'Sunday evening mass' && event.scheduledTeamId) {
-            if (event.scheduledTeamId !== userSundayTeam?.id) {
+          if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+            const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+            const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(member.id));
+            if (!isMyTeamScheduled) {
               if (myRecord.status === 'Present' || myRecord.status === 'Excused but Present') {
                 yearlyMaxPoints += maxPts;
                 yearlyPoints += maxPts * (statusMultipliers[myRecord.status] || 0);
@@ -144,6 +145,7 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
               return;
             }
           }
+          if (myRecord.status === 'Not Applicable') return;
           yearlyMaxPoints += maxPts;
           let effectiveStatus = myRecord.status;
           if (myRecord.status === 'Excused') {
@@ -164,8 +166,10 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
         const myRecord = event.records.find(r => r.id === member.id);
         if (myRecord && pointValues[event.section]) {
           const maxPts = pointValues[event.section];
-          if (event.section === 'Sunday evening mass' && event.scheduledTeamId) {
-            if (event.scheduledTeamId !== userSundayTeam?.id) {
+          if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+            const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+            const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(member.id));
+            if (!isMyTeamScheduled) {
               if (myRecord.status === 'Present' || myRecord.status === 'Excused but Present') {
                 monthlyMaxPoints += maxPts;
                 monthlyPoints += maxPts * (statusMultipliers[myRecord.status] || 0);
@@ -173,6 +177,7 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
               return;
             }
           }
+          if (myRecord.status === 'Not Applicable') return;
           monthlyMaxPoints += maxPts;
           let effectiveStatus = myRecord.status;
           if (myRecord.status === 'Excused') { excuseCounter++; if (excuseCounter > 2) effectiveStatus = 'Absent'; }

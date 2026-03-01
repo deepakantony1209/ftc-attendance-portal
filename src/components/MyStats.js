@@ -402,7 +402,7 @@ function MyStats({ user, history, teams = [], theme, sundaySchedule = [], eventS
       />
 
       <Card className="mb-6">
-        <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-sm">Monthly Breakdown</h5></Card.Header>
+        <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-base font-heading">Monthly Breakdown</h5></Card.Header>
         <Card.Body>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div><label className="form-label">Year</label><select className="form-select" value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value))}>{availableYears.map(year => <option key={year} value={year}>{year}</option>)}</select></div>
@@ -447,7 +447,7 @@ function MyStats({ user, history, teams = [], theme, sundaySchedule = [], eventS
         </Card>
         <div className="lg:col-span-2">
           <Card className="h-full">
-            <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-sm">Credit Distribution</h5></Card.Header>
+            <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-base font-heading">Credit Distribution</h5></Card.Header>
             <Card.Body className="flex flex-col items-center justify-center gap-6 py-6">
               <div className="relative flex items-center justify-center">
                 <svg width="200" height="200" viewBox="0 0 200 200" className="-rotate-90">
@@ -483,7 +483,7 @@ function MyStats({ user, history, teams = [], theme, sundaySchedule = [], eventS
 
       {/* ─── ACTIVITY BREAKDOWN CHART (UNCHANGED) ─── */}
       <Card className="mb-6">
-        <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-sm">Activity Breakdown</h5></Card.Header>
+        <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-base font-heading">Activity Breakdown</h5></Card.Header>
         <Card.Body>
           <div className="h-[280px] sm:h-[320px]">
             <Bar key={isDark ? 'dark' : 'light'} data={barData} options={barOptions} />

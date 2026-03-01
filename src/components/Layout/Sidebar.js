@@ -35,6 +35,7 @@ const Sidebar = ({ user, show, onHide, onLogout, theme, toggleTheme }) => {
         { to: '/teams', icon: 'bi-people-fill', label: 'Teams' },
         { to: '/members', icon: 'bi-person-lines-fill', label: 'Members' },
         { to: '/statistics', icon: 'bi-bar-chart-fill', label: 'Reports' },
+        { to: '/how-to-use', icon: 'bi-question-circle-fill', label: 'How To Use' },
     ];
 
     const memberLinks = [
@@ -45,6 +46,7 @@ const Sidebar = ({ user, show, onHide, onLogout, theme, toggleTheme }) => {
         { to: '/teams', icon: 'bi-people-fill', label: 'Teams' },
         { to: '/members', icon: 'bi-person-lines-fill', label: 'Members' },
         { to: '/profile', icon: 'bi-person-circle', label: 'Profile' },
+        { to: '/how-to-use', icon: 'bi-question-circle-fill', label: 'How To Use' },
     ];
 
     const links = user.role === 'admin' ? adminLinks : memberLinks;
@@ -73,7 +75,7 @@ const Sidebar = ({ user, show, onHide, onLogout, theme, toggleTheme }) => {
                         <div className="w-8 h-8 rounded-xl bg-primary-500 flex items-center justify-center" style={{ boxShadow: '0 4px 12px rgba(55,114,255,0.5)' }}>
                             <i className="bi bi-music-note-beamed text-white text-sm"></i>
                         </div>
-                        <span className="text-lg font-bold text-white tracking-tight">FTC Portal</span>
+                        <span className="text-lg font-bold text-white tracking-tight font-heading">FTC Portal</span>
                     </div>
                 </div>
 

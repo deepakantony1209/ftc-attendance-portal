@@ -205,7 +205,7 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
           pointStyle: 'circle',
           color: legendColor,
           padding: 16,
-          font: { size: 12, family: 'Inter, sans-serif' },
+          font: { size: 12, family: '"DM Sans", sans-serif' },
         },
       },
       title: { display: false },
@@ -241,7 +241,7 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
 
   const renderPerformanceTable = (title, members, colorClass, emptyMsg) => (
     <Card className="h-full">
-      <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-sm">{title}</h5></Card.Header>
+      <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-base font-heading">{title}</h5></Card.Header>
       <Card.Body className="p-0">
         <div className="overflow-x-auto">
           <table className="data-table">
@@ -305,7 +305,7 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6">
         <div className="xl:col-span-2">
           <Card>
-            <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-sm">Activity Breakdown</h5></Card.Header>
+            <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-base font-heading">Activity Breakdown</h5></Card.Header>
             <Card.Body>
               <div className="relative h-[280px] sm:h-[350px]">
                 <Bar key={isDark ? 'dark' : 'light'} options={chartOptions} data={chartData} />
@@ -315,7 +315,7 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
         </div>
         <div>
           <Card className="h-full">
-            <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-sm">Celebrations 🎉</h5></Card.Header>
+            <Card.Header><h5 className="font-bold text-slate-800 dark:text-white text-base font-heading">Celebrations 🎉</h5></Card.Header>
             <Card.Body>
               <div className="mb-4">
                 <h6 className="text-xs font-bold uppercase text-slate-400 dark:text-slate-500 mb-2">Upcoming Birthdays</h6>

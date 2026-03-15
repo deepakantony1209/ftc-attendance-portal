@@ -51,6 +51,19 @@ function AttendanceForm({
     };
   }, [members, searchTerm]);
 
+  const memberTeamMap = useMemo(() => {
+    if (selectedSection !== 'Sunday evening mass' && selectedSection !== 'Marriage mass') return {};
+    const type = selectedSection === 'Sunday evening mass' ? 'sunday' : 'marriage';
+    const relevantTeams = teams.filter(t => t.type === type);
+    const mapping = {};
+    relevantTeams.forEach(team => {
+      team.members.forEach(memberId => {
+        mapping[memberId] = team.name;
+      });
+    });
+    return mapping;
+  }, [selectedSection, teams]);
+
   useEffect(() => {
     if (searchTerm.trim()) {
       setOpenPanels({ male: maleMembers.length > 0, female: femaleMembers.length > 0 });
@@ -90,8 +103,11 @@ function AttendanceForm({
             {member.name.charAt(0)}
           </div>
           <div>
-            <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm">{member.name}</div>
-            {member.role === 'admin' && <span className="text-[10px] font-bold uppercase bg-slate-200 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded">Admin</span>}
+            <div className="font-semibold text-slate-800 dark:text-slate-100 text-sm leading-tight">{member.name}</div>
+            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+              {member.role === 'admin' && <span className="text-[9px] font-bold uppercase bg-slate-200 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded leading-none">Admin</span>}
+              {memberTeamMap[member.id] && <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 italic">{memberTeamMap[member.id]}</span>}
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end w-full md:w-auto">

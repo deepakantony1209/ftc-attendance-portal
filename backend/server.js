@@ -87,12 +87,26 @@ const formatDate = (date) => {
 };
 
 // Helper to find all members of a specific team ID and send them a message
-const notifyTeam = async (teamId, title, body) => {
+const notifyTeam = async (teamId, title, body, excludeIds = []) => {
     try {
+        if (teamId === 'whole' || teamId === 'all-choir') {
+            // Notify everyone in the choir
+            const membersSnapshot = await db.collection('choirMembers').get();
+            for (const doc of membersSnapshot.docs) {
+                if (excludeIds.includes(doc.id)) continue;
+                const memberData = doc.data();
+                if (memberData.fcmToken) {
+                    await sendPushNotification(memberData.fcmToken, title, body);
+                }
+            }
+            return;
+        }
+
         const teamDoc = await db.collection('teams').doc(teamId).get();
         if (teamDoc.exists && teamDoc.data().members) {
             const memberIds = teamDoc.data().members;
             for (const memberId of memberIds) {
+                if (excludeIds.includes(memberId)) continue;
                 const memberDoc = await db.collection('choirMembers').doc(memberId).get();
                 if (memberDoc.exists && memberDoc.data().fcmToken) {
                     await sendPushNotification(memberDoc.data().fcmToken, title, body);
@@ -119,11 +133,15 @@ const isToday = (dateStr) => {
     return false;
 };
 
-// 2. Birthday & Anniversary Notifications (Runs daily at 8:00 AM)
-cron.schedule('0 8 * * *', async () => {
+// 2. Birthday & Anniversary Notifications (Runs daily at 9:00 AM IST / 3:30 AM UTC)
+cron.schedule('30 3 * * *', async () => {
     console.log('Running daily birthday/anniversary check...');
     const today = new Date();
     const isValentinesDay = today.getMonth() === 1 && today.getDate() === 14;
+
+    const bdaysToday = [];
+    const anniversariesToday = [];
+    const celebrantIds = [];
 
     try {
         const membersSnapshot = await db.collection('choirMembers').get();
@@ -131,8 +149,11 @@ cron.schedule('0 8 * * *', async () => {
         for (const doc of membersSnapshot.docs) {
             const data = doc.data();
             const fcmToken = data.fcmToken;
+            const memberId = doc.id;
 
             if (fcmToken) {
+                let isCelebrant = false;
+
                 // Valentine's Day
                 if (isValentinesDay) {
                     await sendPushNotification(fcmToken, "Happy Valentine's Day! ❤️", "Wishing you a day filled with love and joy from FTC!");
@@ -140,41 +161,93 @@ cron.schedule('0 8 * * *', async () => {
 
                 // Birthdays
                 if (isToday(data.dob)) {
-                    await sendPushNotification(fcmToken, "Happy Birthday! 🎂", `Wishing you a fantastic birthday, ${data.name}! From all of us at FTC.`);
+                    bdaysToday.push(data.name);
+                    isCelebrant = true;
+                    // Warm personal wish
+                    const title = `Happy Birthday, ${data.name}! 🎂`;
+                    const body = `Happy Birthday! 🎂 May your day be as wonderful as your music. Wishing you a year filled with joy, peace, and blessings from all of us at FTC.`;
+                    await sendPushNotification(fcmToken, title, body);
                 }
 
                 // Wedding Anniversaries
                 if (data.maritalStatus === 'Married' && isToday(data.weddingDate)) {
-                    await sendPushNotification(fcmToken, "Happy Anniversary! 🎉", `Wishing you a wonderful wedding anniversary, ${data.name}!`);
+                    anniversariesToday.push(data.name);
+                    isCelebrant = true;
+                    // Warm personal wish
+                    const title = `Happy Anniversary! 🎉`;
+                    const body = `Happy Wedding Anniversary, ${data.name}! 🎉 Wishing you and your spouse a lifetime of love, laughter, and happiness together. Warm wishes from your FTC family!`;
+                    await sendPushNotification(fcmToken, title, body);
                 }
+
+                if (isCelebrant) celebrantIds.push(memberId);
             }
         }
+
+        // --- Broadcast to Whole Choir (Excluding the celebrants to avoid double notifications) ---
+        if (bdaysToday.length > 0) {
+            const names = bdaysToday.join(', ');
+            const title = bdaysToday.length === 1 ? "Birthday Celebration! 🎂" : "Birthday Celebrations! 🎂";
+            const body = bdaysToday.length === 1 
+                ? `Today is ${names}'s Birthday! 🎂 Let's all wish them a fantastic day filled with blessings! 🎉`
+                : `Today we celebrate the birthdays of ${names}! 🎂 Let's wish them all a fantastic day! 🎉`;
+            
+            await notifyTeam('whole', title, body, celebrantIds);
+        }
+
+        if (anniversariesToday.length > 0) {
+            const names = anniversariesToday.join(', ');
+            const title = "Wedding Anniversary! 🎉";
+            const body = anniversariesToday.length === 1
+                ? `Happy Wedding Anniversary to ${names}! 🎉 Let's celebrate this beautiful milestone with them! 💖`
+                : `Happy Wedding Anniversary to ${names}! 🎉 Let's wish these couples a lifetime of love and joy! 💖`;
+
+            await notifyTeam('whole', title, body, celebrantIds);
+        }
+
     } catch (err) {
         console.error('Error in daily notifications:', err);
     }
 });
 
-// 3. Event Reminders (Runs every 15 minutes checking for events 1hr and 30m away)
-cron.schedule('*/15 * * * *', async () => {
+// Guard to prevent duplicate reminders in the same minute
+const sentReminders = new Set();
+// Clear the guard every hour to keep Memory usage low (reminders are per day/time specific anyway)
+cron.schedule('0 * * * *', () => sentReminders.clear());
+
+// 3. Event Reminders (Runs every minute checking for events exactly 1hr and 30m away)
+cron.schedule('* * * * *', async () => {
     console.log('Running event reminder check...');
     const now = new Date();
     const todayStr = formatDate(now);
 
-    const checkEvent = async (schedule, eventTypeStr, isSunday = false) => {
-        if (!schedule || !schedule.time || !schedule.teamId) return;
+    const checkEvent = async (schedule, eventTypeStr, eventId, isSunday = false) => {
+        if (!schedule || !schedule.teamId) return;
 
-        // Parse schedule.time (e.g. "17:00")
-        const [hours, mins] = schedule.time.split(':').map(Number);
+        // Use schedule.time or default to 17:30 for Sunday Evening Mass
+        let timeStr = schedule.time;
+        if (!timeStr && isSunday && eventTypeStr === "Sunday Evening Mass") {
+            timeStr = "17:30";
+        }
+        
+        if (!timeStr) return;
+
+        // Parse time (e.g. "17:00")
+        const [hours, mins] = timeStr.split(':').map(Number);
         const eventTime = new Date(now);
         eventTime.setHours(hours, mins, 0, 0);
 
-        const diffMins = Math.floor((eventTime - now) / 60000);
+        const diffMins = Math.round((eventTime - now) / 60000);
 
-        // We want exactly 1 hour (between 45-60) and 30 mins (between 15-30)
-        if (diffMins > 45 && diffMins <= 60) {
-            await notifyTeam(schedule.teamId, `Reminder: ${eventTypeStr} in 1 Hour`, `Please get ready. (${schedule.time})`);
-        } else if (diffMins > 15 && diffMins <= 30) {
-            await notifyTeam(schedule.teamId, `Reminder: ${eventTypeStr} in 30 Minutes`, `Please gather for setup. (${schedule.time})`);
+        // Reminder types: 60 or 30
+        if (diffMins === 60 || diffMins === 30) {
+            const reminderKey = `${eventId}-${diffMins}`;
+            if (sentReminders.has(reminderKey)) return; // Already sent in this minute
+
+            const label = diffMins === 60 ? "1 Hour" : "30 Minutes";
+            const action = diffMins === 60 ? "Please get ready." : "Please gather for setup.";
+            
+            await notifyTeam(schedule.teamId, `Reminder: ${eventTypeStr} in ${label}`, `${action} (${timeStr})`);
+            sentReminders.add(reminderKey);
         }
     };
 
@@ -182,15 +255,15 @@ cron.schedule('*/15 * * * *', async () => {
         // 1. Check Sunday Schedule
         const sundayDoc = await db.collection('sundaySchedule').doc(todayStr).get();
         if (sundayDoc.exists) {
-            await checkEvent(sundayDoc.data(), "Sunday Evening Mass", true);
+            await checkEvent(sundayDoc.data(), "Sunday Evening Mass", `sunday-${todayStr}`, true);
         }
 
         // 2. Check Event Schedules for today
         const eventsSnapshot = await db.collection('eventSchedules').where('date', '==', todayStr).get();
-        eventsSnapshot.forEach(async (doc) => {
+        for (const doc of eventsSnapshot.docs) {
             const evt = doc.data();
-            await checkEvent(evt, evt.type || "Special Event", false);
-        });
+            await checkEvent(evt, evt.type || "Special Event", doc.id, false);
+        }
 
     } catch (err) {
         console.error('Error checking reminders:', err);

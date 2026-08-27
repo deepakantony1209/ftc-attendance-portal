@@ -223,7 +223,7 @@ function ManageMembers({ members, onAddMember, onEditMember, onRemoveMember, isR
               <h3 className="font-bold text-slate-800 dark:text-white">{memberToEdit ? 'Edit Member Details' : 'Add New Member'}</h3>
               <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><i className="bi bi-x-lg"></i></button>
             </div>
-            <div className="p-5">
+            <div className="p-5 overflow-y-auto flex-1">
               <MemberForm member={memberToEdit} onSave={handleFormSubmit} onCancel={handleCloseModal} />
             </div>
           </div>
@@ -260,31 +260,33 @@ function ManageMembers({ members, onAddMember, onEditMember, onRemoveMember, isR
               <h3 className="font-bold text-slate-800 dark:text-white">Member Profile</h3>
               <button onClick={handleCloseDetails} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><i className="bi bi-x-lg"></i></button>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-900 p-6 text-center border-b border-slate-200 dark:border-slate-700">
-              <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-white text-3xl font-bold shadow-lg mb-3 ${memberToView.gender === 'Female' ? 'bg-amber-500' : 'bg-sky-500'}`}>
-                {memberToView.name.charAt(0)}
-              </div>
-              <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-1">{memberToView.name}</h4>
-              <a href={`mailto:${memberToView.email}`} className="text-sm text-slate-500 mb-2 hover:text-primary-500 hover:underline inline-block">{memberToView.email}</a>
-              <div className="flex justify-center gap-2">
-                <span className="text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{memberToView.gender}</span>
-                {memberToView.isOrganist && <span className="text-xs font-semibold bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 px-2 py-1 rounded-full">Organist</span>}
-              </div>
-            </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {[
-                { label: 'Date of Birth', value: memberToView.dob ? new Date(memberToView.dob).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'N/A' },
-                { label: 'Phone', value: memberToView.phone ? <a href={`tel:${memberToView.phone}`} className="hover:text-primary-600 hover:underline text-primary-600 dark:text-primary-400">{memberToView.phone}</a> : 'N/A' },
-                { label: 'Marital Status', value: memberToView.maritalStatus || 'N/A' },
-                ...(memberToView.maritalStatus === 'Married' ? [{ label: 'Wedding Date', value: memberToView.weddingDate ? new Date(memberToView.weddingDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A' }] : []),
-                { label: 'Anbiyam', value: memberToView.anbiyam || 'N/A' },
-                { label: 'Address', value: memberToView.address || 'N/A' },
-              ].map((item, i) => (
-                <div key={i} className="px-6 py-3">
-                  <div className="text-xs font-bold uppercase text-slate-400 mb-0.5">{item.label}</div>
-                  <div className="text-sm text-slate-700 dark:text-slate-300">{item.value}</div>
+            <div className="overflow-y-auto flex-1">
+              <div className="bg-slate-50 dark:bg-slate-900 p-6 text-center border-b border-slate-200 dark:border-slate-700">
+                <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-white text-3xl font-bold shadow-lg mb-3 ${memberToView.gender === 'Female' ? 'bg-amber-500' : 'bg-sky-500'}`}>
+                  {memberToView.name.charAt(0)}
                 </div>
-              ))}
+                <h4 className="text-xl font-bold text-slate-800 dark:text-white mb-1">{memberToView.name}</h4>
+                <a href={`mailto:${memberToView.email}`} className="text-sm text-slate-500 mb-2 hover:text-primary-500 hover:underline inline-block">{memberToView.email}</a>
+                <div className="flex justify-center gap-2">
+                  <span className="text-xs font-semibold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{memberToView.gender}</span>
+                  {memberToView.isOrganist && <span className="text-xs font-semibold bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400 px-2 py-1 rounded-full">Organist</span>}
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                {[
+                  { label: 'Date of Birth', value: memberToView.dob ? new Date(memberToView.dob).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'N/A' },
+                  { label: 'Phone', value: memberToView.phone ? <a href={`tel:${memberToView.phone}`} className="hover:text-primary-600 hover:underline text-primary-600 dark:text-primary-400">{memberToView.phone}</a> : 'N/A' },
+                  { label: 'Marital Status', value: memberToView.maritalStatus || 'N/A' },
+                  ...(memberToView.maritalStatus === 'Married' ? [{ label: 'Wedding Date', value: memberToView.weddingDate ? new Date(memberToView.weddingDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'N/A' }] : []),
+                  { label: 'Anbiyam', value: memberToView.anbiyam || 'N/A' },
+                  { label: 'Address', value: memberToView.address || 'N/A' },
+                ].map((item, i) => (
+                  <div key={i} className="px-6 py-3">
+                    <div className="text-xs font-bold uppercase text-slate-400 mb-0.5">{item.label}</div>
+                    <div className="text-sm text-slate-700 dark:text-slate-300">{item.value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="p-5 border-t border-slate-200 dark:border-slate-700 flex justify-end">
               <Button variant="secondary" onClick={handleCloseDetails}>Close</Button>

@@ -102,10 +102,26 @@ const activityColors = [
 ];
 
 // ─── Expanded detail panel ───────────────────────────────────────────────────
+// ─── Constants ──────────────────────────────────────────────────────────────
+const ALL_CATEGORIES = [
+  'Sunday evening mass',
+  'Sunday morning mass',
+  'Saturday practice',
+  'Special mass',
+  'Special mass practice',
+  'Marriage mass',
+  'Choir meeting',
+  'Cleaning',
+  'Daily mass',
+  'Others'
+];
+
+// ─── Expanded detail panel ───────────────────────────────────────────────────
 function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
   const isDark = theme === 'dark';
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState('all');
+  const [activeTab, setActiveTab] = useState('performance');
   const [showDownloadMenu, setShowDownloadMenu] = useState(false);
   const downloadMenuRef = useRef(null);
 
@@ -188,6 +204,83 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
     }
   }, [member, attendanceHistory, selectedYear, selectedMonth, teams]);
 
+  // Compute category counts dynamically (Present, Absent, Excused, Excused but Present)
+  const categoryCounts = useMemo(() => {
+    const recordsInYear = attendanceHistory.filter(e => new Date(e.date).getFullYear() === selectedYear);
+    const recordsInPeriod = selectedMonth === 'all'
+      ? recordsInYear
+      : recordsInYear.filter(e => new Date(e.date).getMonth() === parseInt(selectedMonth));
+
+    const counts = {};
+    ALL_CATEGORIES.forEach(cat => {
+      counts[cat] = { attended: 0, absent: 0, excused: 0, excusedPresent: 0, total: 0 };
+    });
+
+    recordsInPeriod.forEach(event => {
+      const myRecord = event.records.find(r => r.id === member.id);
+      if (myRecord) {
+        const cat = event.section;
+        if (!counts[cat]) {
+          counts[cat] = { attended: 0, absent: 0, excused: 0, excusedPresent: 0, total: 0 };
+        }
+
+        // Apply Sunday Evening Mass and Marriage Mass team scheduling rule:
+        if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+          const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+          const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(member.id));
+          if (!isMyTeamScheduled) {
+            if (myRecord.status === 'Present') {
+              counts[cat].attended++;
+              counts[cat].total++;
+            } else if (myRecord.status === 'Excused but Present') {
+              counts[cat].excusedPresent++;
+              counts[cat].total++;
+            }
+            return;
+          }
+        }
+
+        if (myRecord.status === 'Not Applicable') return;
+
+        if (myRecord.status === 'Present') {
+          counts[cat].attended++;
+          counts[cat].total++;
+        } else if (myRecord.status === 'Absent') {
+          counts[cat].absent++;
+          counts[cat].total++;
+        } else if (myRecord.status === 'Excused') {
+          counts[cat].excused++;
+          counts[cat].total++;
+        } else if (myRecord.status === 'Excused but Present') {
+          counts[cat].excusedPresent++;
+          counts[cat].total++;
+        }
+      }
+    });
+
+    let totalAttended = 0;
+    let totalAbsent = 0;
+    let totalExcused = 0;
+    let totalExcusedPresent = 0;
+    let totalExpected = 0;
+    Object.values(counts).forEach(c => {
+      totalAttended += c.attended;
+      totalAbsent += c.absent;
+      totalExcused += c.excused;
+      totalExcusedPresent += c.excusedPresent;
+      totalExpected += c.total;
+    });
+
+    return {
+      breakdown: counts,
+      totalAttended,
+      totalAbsent,
+      totalExcused,
+      totalExcusedPresent,
+      totalExpected
+    };
+  }, [member, attendanceHistory, selectedYear, selectedMonth, teams]);
+
   const tickColor = isDark ? '#94a3b8' : '#64748b';
   const gridColor = isDark ? 'rgba(148,163,184,0.12)' : 'rgba(0,0,0,0.06)';
 
@@ -214,6 +307,72 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
     },
   };
 
+  // Grouped Bar Chart data/options for counts (4 separate datasets)
+  const chartCategories = Object.keys(categoryCounts.breakdown).filter(cat => categoryCounts.breakdown[cat].total > 0);
+  const barDataCounts = {
+    labels: chartCategories,
+    datasets: [
+      {
+        label: 'Attended',
+        data: chartCategories.map(cat => categoryCounts.breakdown[cat].attended),
+        backgroundColor: 'rgba(16, 185, 129, 0.85)', // Emerald Green
+        borderRadius: 4,
+      },
+      {
+        label: 'Absent',
+        data: chartCategories.map(cat => categoryCounts.breakdown[cat].absent),
+        backgroundColor: 'rgba(239, 68, 68, 0.85)', // Rose Red
+        borderRadius: 4,
+      },
+      {
+        label: 'Excused',
+        data: chartCategories.map(cat => categoryCounts.breakdown[cat].excused),
+        backgroundColor: 'rgba(245, 158, 11, 0.85)', // Amber Yellow
+        borderRadius: 4,
+      },
+      {
+        label: 'Excused but Present',
+        data: chartCategories.map(cat => categoryCounts.breakdown[cat].excusedPresent),
+        backgroundColor: 'rgba(59, 130, 246, 0.85)', // Blue
+        borderRadius: 4,
+      }
+    ]
+  };
+
+  const barOptionsCounts = {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'bottom',
+        labels: {
+          color: tickColor,
+          font: { size: 10, family: '"DM Sans", sans-serif' }
+        }
+      },
+      tooltip: {
+        backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.95)',
+        titleColor: isDark ? '#e2e8f0' : '#1e293b',
+        bodyColor: isDark ? '#94a3b8' : '#475569',
+        borderColor: isDark ? 'rgba(71,85,105,0.5)' : 'rgba(226,232,240,0.8)',
+        borderWidth: 1,
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: { color: tickColor, stepSize: 1 },
+        grid: { color: gridColor },
+        border: { color: 'transparent' }
+      },
+      x: {
+        ticks: { color: tickColor, font: { size: 10 }, maxRotation: 35 },
+        grid: { display: false },
+        border: { color: 'transparent' }
+      }
+    }
+  };
+
   const downloadYearlyPdf = () => {
     const currentYear = new Date().getFullYear();
     const doc = new jsPDF();
@@ -221,8 +380,72 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
     doc.setFontSize(14); doc.text(sanitizeText(member.name), 14, 30);
     const summaryBody = [[`Attendance % (${currentYear})`, `${stats.percentage}%`], ['Total Points Earned', `${stats.totalPointsAwarded} / ${stats.totalMaxPoints}`], ['Excused Absences', stats.excusedCount], ['Excuse Balance', `${Math.max(0, 24 - stats.excusedCount)} / 24`], ['Excused but Present', stats.excusedPresentCount]];
     autoTable(doc, { startY: 40, head: [['Current Year Summary', 'Value']], body: summaryBody, theme: 'striped', headStyles: { fillColor: [55, 114, 255] } });
+    
     const tableRows = Object.entries(stats.sectionData).map(([section, data]) => { const pct = data.maxPoints > 0 ? ((data.pointsAwarded / data.maxPoints) * 100).toFixed(1) : '0.0'; return [sanitizeText(section), `${data.pointsAwarded.toFixed(1)} / ${data.maxPoints.toFixed(1)}`, `${pct}%`]; });
     if (tableRows.length > 0) autoTable(doc, { startY: doc.lastAutoTable.finalY + 10, head: [['Gathering Type Breakdown', 'Points', 'Percentage (%)']], body: tableRows, theme: 'grid', headStyles: { fillColor: [22, 160, 133] } });
+
+    // Compute yearly counts for PDF
+    const yearlyCounts = {};
+    ALL_CATEGORIES.forEach(cat => { yearlyCounts[cat] = { attended: 0, absent: 0, excused: 0, excusedPresent: 0, total: 0 }; });
+    const recordsInYearForPdf = attendanceHistory.filter(e => new Date(e.date).getFullYear() === currentYear);
+    recordsInYearForPdf.forEach(event => {
+      const myRecord = event.records.find(r => r.id === member.id);
+      if (myRecord) {
+        const cat = event.section;
+        if (!yearlyCounts[cat]) yearlyCounts[cat] = { attended: 0, absent: 0, excused: 0, excusedPresent: 0, total: 0 };
+        if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+          const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+          const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(member.id));
+          if (!isMyTeamScheduled) {
+            if (myRecord.status === 'Present') {
+              yearlyCounts[cat].attended++;
+              yearlyCounts[cat].total++;
+            } else if (myRecord.status === 'Excused but Present') {
+              yearlyCounts[cat].excusedPresent++;
+              yearlyCounts[cat].total++;
+            }
+            return;
+          }
+        }
+        if (myRecord.status === 'Not Applicable') return;
+        if (myRecord.status === 'Present') {
+          yearlyCounts[cat].attended++;
+          yearlyCounts[cat].total++;
+        } else if (myRecord.status === 'Absent') {
+          yearlyCounts[cat].absent++;
+          yearlyCounts[cat].total++;
+        } else if (myRecord.status === 'Excused') {
+          yearlyCounts[cat].excused++;
+          yearlyCounts[cat].total++;
+        } else if (myRecord.status === 'Excused but Present') {
+          yearlyCounts[cat].excusedPresent++;
+          yearlyCounts[cat].total++;
+        }
+      }
+    });
+
+    const countRows = Object.entries(yearlyCounts)
+      .filter(([_, c]) => c.total > 0)
+      .map(([cat, c]) => [
+        sanitizeText(cat),
+        c.attended.toString(),
+        c.absent.toString(),
+        c.excused.toString(),
+        c.excusedPresent.toString(),
+        c.total.toString()
+      ]);
+
+    if (countRows.length > 0) {
+      doc.setFontSize(14);
+      doc.text('Gathering Type Attendance Counts', 14, doc.lastAutoTable.finalY + 15);
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 20,
+        head: [['Gathering Type', 'Attended', 'Absent', 'Excused', 'Excused but Present', 'Total Expected']],
+        body: countRows,
+        theme: 'grid',
+        headStyles: { fillColor: [52, 73, 94] }
+      });
+    }
 
     // Detailed Event Log
     const recordsInYear = attendanceHistory.filter(e => new Date(e.date).getFullYear() === currentYear).sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -253,9 +476,8 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
         headStyles: { fillColor: [75, 85, 99] }, // Slate-600
         didParseCell: function (data) {
           if (data.section === 'body' && data.column.index === 3) {
-            if (data.cell.raw === 'Absent') data.cell.styles.textColor = [220, 53, 69];
-            else if (data.cell.raw === 'Excused') data.cell.styles.textColor = [255, 193, 7];
-            else if (data.cell.raw === 'Present') data.cell.styles.textColor = [25, 135, 84];
+            if (data.cell.raw === 'Absent' || data.cell.raw === 'Excused') data.cell.styles.textColor = [220, 53, 69];
+            else if (data.cell.raw === 'Present' || data.cell.raw === 'Excused but Present') data.cell.styles.textColor = [25, 135, 84];
           }
         }
       });
@@ -273,6 +495,72 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
     doc.setFontSize(11); doc.setTextColor(100); doc.text(`Report for: ${monthName}`, 14, 36);
     const summaryBody = [['Overall Attendance', `${monthlyYearlyStats.percentage}%`], ['Excused Absences', monthlyYearlyStats.excusesUsed], ['Excuse Balance', `${monthlyYearlyStats.excuseBalance} / 2`]];
     autoTable(doc, { startY: 45, head: [['Monthly Summary', 'Value']], body: summaryBody, theme: 'striped' });
+
+    // Compute monthly counts for PDF
+    const monthlyCounts = {};
+    ALL_CATEGORIES.forEach(cat => { monthlyCounts[cat] = { attended: 0, absent: 0, excused: 0, excusedPresent: 0, total: 0 }; });
+    const recordsInMonthForPdf = attendanceHistory.filter(
+      e => new Date(e.date).getFullYear() === selectedYear && new Date(e.date).getMonth() === parseInt(selectedMonth)
+    );
+    recordsInMonthForPdf.forEach(event => {
+      const myRecord = event.records.find(r => r.id === member.id);
+      if (myRecord) {
+        const cat = event.section;
+        if (!monthlyCounts[cat]) monthlyCounts[cat] = { attended: 0, absent: 0, excused: 0, excusedPresent: 0, total: 0 };
+        if ((event.section === 'Sunday evening mass' || event.section === 'Marriage mass') && event.scheduledTeamId) {
+          const scheduledTeam = teams.find(t => t.id === event.scheduledTeamId);
+          const isMyTeamScheduled = event.scheduledTeamId === 'whole' || (scheduledTeam && scheduledTeam.members.includes(member.id));
+          if (!isMyTeamScheduled) {
+            if (myRecord.status === 'Present') {
+              monthlyCounts[cat].attended++;
+              monthlyCounts[cat].total++;
+            } else if (myRecord.status === 'Excused but Present') {
+              monthlyCounts[cat].excusedPresent++;
+              monthlyCounts[cat].total++;
+            }
+            return;
+          }
+        }
+        if (myRecord.status === 'Not Applicable') return;
+        if (myRecord.status === 'Present') {
+          monthlyCounts[cat].attended++;
+          monthlyCounts[cat].total++;
+        } else if (myRecord.status === 'Absent') {
+          monthlyCounts[cat].absent++;
+          monthlyCounts[cat].total++;
+        } else if (myRecord.status === 'Excused') {
+          monthlyCounts[cat].excused++;
+          monthlyCounts[cat].total++;
+        } else if (myRecord.status === 'Excused but Present') {
+          monthlyCounts[cat].excusedPresent++;
+          monthlyCounts[cat].total++;
+        }
+      }
+    });
+
+    const monthlyCountRows = Object.entries(monthlyCounts)
+      .filter(([_, c]) => c.total > 0)
+      .map(([cat, c]) => [
+        sanitizeText(cat),
+        c.attended.toString(),
+        c.absent.toString(),
+        c.excused.toString(),
+        c.excusedPresent.toString(),
+        c.total.toString()
+      ]);
+
+    if (monthlyCountRows.length > 0) {
+      doc.setFontSize(14);
+      doc.text('Monthly Gathering Type Attendance Counts', 14, doc.lastAutoTable.finalY + 15);
+      autoTable(doc, {
+        startY: doc.lastAutoTable.finalY + 20,
+        head: [['Gathering Type', 'Attended', 'Absent', 'Excused', 'Excused but Present', 'Total Expected']],
+        body: monthlyCountRows,
+        theme: 'grid',
+        headStyles: { fillColor: [52, 73, 94] }
+      });
+    }
+
     doc.save(`Monthly_Report_${sanitizeText(member.name).replace(/\s+/g, '_')}_${selectedYear}_${parseInt(selectedMonth) + 1}.pdf`);
   };
 
@@ -312,41 +600,154 @@ function MemberDetailPanel({ member, stats, attendanceHistory, teams, theme }) {
         </div>
       </div>
 
-      {/* Period stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <StatCard title={`Attendance — ${monthlyYearlyStats.period}`} value={`${monthlyYearlyStats.percentage}%`} icon="bi-pie-chart-fill" color={parseFloat(monthlyYearlyStats.percentage) >= 80 ? 'success' : 'warning'} />
-        <StatCard title="Excused Absences" value={monthlyYearlyStats.excusesUsed} icon="bi-calendar-x-fill" color="danger" />
-        <StatCard title="Excuses Remaining" value={monthlyYearlyStats.excuseBalance} icon="bi-check-circle-fill" color="info" />
+      {/* Tabs */}
+      <div className="flex border-b border-slate-100 dark:border-slate-700/40 pb-2">
+        <button
+          onClick={() => setActiveTab('performance')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+            activeTab === 'performance'
+              ? 'bg-primary-500 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <i className="bi bi-award-fill mr-1.5"></i>Scores & Credits
+        </button>
+        <button
+          onClick={() => setActiveTab('counts')}
+          className={`ml-2 px-4 py-2 text-xs font-bold rounded-lg transition-all ${
+            activeTab === 'counts'
+              ? 'bg-primary-500 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+          }`}
+        >
+          <i className="bi bi-grid-fill mr-1.5"></i>Attendance Counts
+        </button>
       </div>
 
-      {/* Yearly overview */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="nock-card p-4 text-center">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Overall ({new Date().getFullYear()})</div>
-          <div className="text-2xl font-extrabold" style={{ color: parseFloat(stats.percentage) >= 80 ? '#45B36B' : parseFloat(stats.percentage) >= 60 ? '#f59e0b' : '#EF466F' }}>{stats.percentage}%</div>
-        </div>
-        <div className="nock-card p-4 text-center">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Credits</div>
-          <div className="text-lg font-extrabold text-slate-800 dark:text-white">{stats.totalPointsAwarded}<span className="text-xs text-slate-400 font-normal"> / {stats.totalMaxPoints}</span></div>
-        </div>
-        <div className="nock-card p-4 text-center">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Excused Present</div>
-          <div className="text-2xl font-extrabold text-emerald-500">{stats.excusedPresentCount}</div>
-        </div>
-        <div className="nock-card p-4 text-center">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Total Excuses</div>
-          <div className="text-2xl font-extrabold text-red-500">{stats.excusedCount}</div>
-        </div>
-      </div>
-
-      {/* Activity breakdown chart */}
-      {Object.keys(stats.sectionData).length > 0 && (
-        <div className="nock-card p-4">
-          <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Activity Breakdown</div>
-          <div className="h-[200px]">
-            <Bar key={isDark ? 'dark' : 'light'} data={barData} options={barOptions} />
+      {activeTab === 'performance' ? (
+        <>
+          {/* Period stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <StatCard title={`Attendance — ${monthlyYearlyStats.period}`} value={`${monthlyYearlyStats.percentage}%`} icon="bi-pie-chart-fill" color={parseFloat(monthlyYearlyStats.percentage) >= 80 ? 'success' : 'warning'} />
+            <StatCard title="Excused Absences" value={monthlyYearlyStats.excusesUsed} icon="bi-calendar-x-fill" color="danger" />
+            <StatCard title="Excuses Remaining" value={monthlyYearlyStats.excuseBalance} icon="bi-check-circle-fill" color="info" />
           </div>
-        </div>
+
+          {/* Yearly overview */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="nock-card p-4 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Overall ({new Date().getFullYear()})</div>
+              <div className="text-2xl font-extrabold" style={{ color: parseFloat(stats.percentage) >= 80 ? '#45B36B' : parseFloat(stats.percentage) >= 60 ? '#f59e0b' : '#EF466F' }}>{stats.percentage}%</div>
+            </div>
+            <div className="nock-card p-4 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Credits</div>
+              <div className="text-lg font-extrabold text-slate-800 dark:text-white">{stats.totalPointsAwarded}<span className="text-xs text-slate-400 font-normal"> / {stats.totalMaxPoints}</span></div>
+            </div>
+            <div className="nock-card p-4 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Excused Present</div>
+              <div className="text-2xl font-extrabold text-emerald-500">{stats.excusedPresentCount}</div>
+            </div>
+            <div className="nock-card p-4 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Total Excuses</div>
+              <div className="text-2xl font-extrabold text-red-500">{stats.excusedCount}</div>
+            </div>
+          </div>
+
+          {/* Activity breakdown chart */}
+          {Object.keys(stats.sectionData).length > 0 && (
+            <div className="nock-card p-4">
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Activity Breakdown</div>
+              <div className="h-[200px]">
+                <Bar key={isDark ? 'dark' : 'light'} data={barData} options={barOptions} />
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Counts overview stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard title="Attended" value={categoryCounts.totalAttended} icon="bi-check-circle-fill" color="success" />
+            <StatCard title="Absent" value={categoryCounts.totalAbsent} icon="bi-x-circle-fill" color="danger" />
+            <StatCard title="Excused" value={categoryCounts.totalExcused} icon="bi-calendar-x-fill" color="warning" />
+            <StatCard title="Excused but Present" value={categoryCounts.totalExcusedPresent} icon="bi-person-check-fill" color="info" />
+          </div>
+
+          {/* Grouped Bar Chart of counts */}
+          {chartCategories.length > 0 ? (
+            <div className="nock-card p-4">
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Gathering Count Breakdown</div>
+              <div className="h-[240px]">
+                <Bar key={isDark ? 'dark-counts' : 'light-counts'} data={barDataCounts} options={barOptionsCounts} />
+              </div>
+            </div>
+          ) : (
+            <div className="nock-card p-8 text-center text-slate-400 text-sm">No activity recorded for this period.</div>
+          )}
+
+          {/* Detailed counts table */}
+          <div className="nock-card overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700/40 bg-slate-50/50 dark:bg-slate-800/10 flex items-center justify-between">
+              <h6 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-0">Detailed Category Metrics</h6>
+              <span className="text-[10px] text-slate-400 dark:text-slate-500">Excludes 'Not Applicable' events</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="data-table w-full text-xs">
+                <thead>
+                  <tr className="bg-slate-50/50 dark:bg-slate-800/20 text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider text-[10px] border-b border-slate-100 dark:border-slate-700/40">
+                    <th className="px-4 py-3 text-left">Category</th>
+                    <th className="px-4 py-3 text-center">Attended</th>
+                    <th className="px-4 py-3 text-center">Absent</th>
+                    <th className="px-4 py-3 text-center">Excused</th>
+                    <th className="px-4 py-3 text-center">Excused but Present</th>
+                    <th className="px-4 py-3 text-center">Total Expected</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/40">
+                  {Object.entries(categoryCounts.breakdown).map(([category, c]) => {
+                    const hasEvents = c.total > 0;
+                    return (
+                      <tr key={category} className={`${hasEvents ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 dark:text-slate-600 opacity-60'} hover:bg-slate-50 dark:hover:bg-white/5 transition-colors`}>
+                        <td className="px-4 py-3 font-semibold text-left">{category}</td>
+                        <td className="px-4 py-3 text-center">
+                          {c.attended > 0 ? (
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full text-[11px]">{c.attended}</span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-600">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {c.absent > 0 ? (
+                            <span className="font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-full text-[11px]">{c.absent}</span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-600">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {c.excused > 0 ? (
+                            <span className="font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-full text-[11px]">{c.excused}</span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-600">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {c.excusedPresent > 0 ? (
+                            <span className="font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 rounded-full text-[11px]">{c.excusedPresent}</span>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-600">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-slate-800 dark:text-slate-100">
+                          {c.total > 0 ? c.total : <span className="text-slate-400 dark:text-slate-600 font-normal">-</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

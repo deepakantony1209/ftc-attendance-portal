@@ -86,7 +86,15 @@ function AppContent() {
         const userProfileRef = doc(db, "choirMembers", user.uid);
         const userProfileDoc = await getDoc(userProfileRef);
         if (userProfileDoc.exists()) {
-          setLoggedInUser({ id: userProfileDoc.id, uid: user.uid, role: 'user', ...userProfileDoc.data() });
+          const profileData = userProfileDoc.data();
+          if (profileData.disabled && profileData.role !== 'admin' && user.email !== 'fathimatamilchoir@gmail.com') {
+            await signOut(auth);
+            toast.error('Your account is currently disabled. Please contact the choir administrator.');
+            setLoggedInUser(null);
+            setAuthLoading(false);
+            return;
+          }
+          setLoggedInUser({ id: userProfileDoc.id, uid: user.uid, role: 'user', ...profileData });
           // Request token on successful login
           requestNotificationPermissionAndSaveToken(userProfileDoc.id);
         } else if (user.email === 'fathimatamilchoir@gmail.com') {
@@ -159,13 +167,17 @@ function AppContent() {
       setEventTime(recordToEdit.time || '');
       setSelectedScheduledTeam(recordToEdit.scheduledTeamId || '');
       const attendanceMap = new Map(recordToEdit.records.map(r => [r.id, { status: r.status, reason: r.reason }]));
-      setMembersForAttendance(choirMembers.map(member => ({
+      // Include active members plus any members already present in the historical record being edited
+      const relevantMembers = choirMembers.filter(member => !member.disabled || attendanceMap.has(member.id));
+      setMembersForAttendance(relevantMembers.map(member => ({
         ...member,
         status: attendanceMap.get(member.id)?.status || null,
         reason: attendanceMap.get(member.id)?.reason || '',
       })));
     } else {
-      setMembersForAttendance(choirMembers.map(m => ({ ...m, status: null, reason: '' })));
+      // For new attendance records, only show active members
+      const activeMembers = choirMembers.filter(m => !m.disabled);
+      setMembersForAttendance(activeMembers.map(m => ({ ...m, status: null, reason: '' })));
     }
   }, [choirMembers, recordToEdit]);
 
@@ -191,7 +203,8 @@ function AppContent() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, newMemberData.email, 'choirmember');
       const newUserId = userCredential.user.uid;
-      await setDoc(doc(db, 'choirMembers', newUserId), newMemberData);
+      const memberToSave = { disabled: false, ...newMemberData };
+      await setDoc(doc(db, 'choirMembers', newUserId), memberToSave);
       toast.success(`${newMemberData.name} has been added and their account has been created.`);
       return true;
     } catch (error) {
@@ -209,6 +222,24 @@ function AppContent() {
     const memberDocRef = doc(db, 'choirMembers', id);
     await updateDoc(memberDocRef, dataToUpdate);
     toast.success(`${memberData.name}'s profile has been updated.`);
+  };
+
+  const handleToggleMemberDisabled = async (memberId, currentlyDisabled) => {
+    const member = choirMembers.find(m => m.id === memberId);
+    if (!member) return;
+    if (member.role === 'admin' || member.email === 'fathimatamilchoir@gmail.com') {
+      toast.error('Admin accounts cannot be disabled.');
+      return;
+    }
+    try {
+      const memberDocRef = doc(db, 'choirMembers', memberId);
+      const newDisabledState = !currentlyDisabled;
+      await updateDoc(memberDocRef, { disabled: newDisabledState });
+      toast.success(`${member.name} has been ${newDisabledState ? 'marked as disabled' : 're-enabled'}.`);
+    } catch (error) {
+      console.error('Error toggling member status:', error);
+      toast.error('Failed to update member status.');
+    }
   };
 
   const handleRemoveMember = async (memberIdToRemove) => {
@@ -521,7 +552,7 @@ function AppContent() {
                 <Route path="/schedule" element={<Schedule user={loggedInUser} teams={teams} sundaySchedule={sundaySchedule} eventSchedules={eventSchedules} attendanceHistory={attendanceHistory} choirMembersList={choirMembers} onGenerateSunday={handleGenerateSchedule} onUpdateSunday={handleUpdateScheduleEntry} onAddEvent={handleAddEventSchedule} onEditEvent={handleEditEventSchedule} onDeleteEvent={handleDeleteEventSchedule} onMarkAttendance={handleMarkAttendanceFromSchedule} isLoading={teamsLoading} />} />
                 <Route path="/statistics" element={<MemberReport attendanceHistory={attendanceHistory} choirMembersList={choirMembers} isLoading={historyLoading || membersLoading} teams={teams} theme={theme} />} />
                 <Route path="/teams" element={<ManageTeams loggedInUser={loggedInUser} choirMembersList={choirMembers} teams={teams} onUpdateTeam={handleUpdateTeam} onCreateTeam={handleCreateTeam} onDeleteTeam={handleDeleteTeam} isReadOnly={false} isLoading={teamsLoading || membersLoading} />} />
-                <Route path="/members" element={<ManageMembers members={choirMembers} onAddMember={handleAddNewMember} onEditMember={handleEditMember} onRemoveMember={handleRemoveMember} isReadOnly={false} isLoading={membersLoading} />} />
+                <Route path="/members" element={<ManageMembers members={choirMembers} onAddMember={handleAddNewMember} onEditMember={handleEditMember} onRemoveMember={handleRemoveMember} onToggleDisable={handleToggleMemberDisabled} isReadOnly={false} isLoading={membersLoading} />} />
                 <Route path="/how-to-use" element={<HowToUse user={loggedInUser} />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </>

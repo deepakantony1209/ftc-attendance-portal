@@ -758,15 +758,19 @@ function MemberReport({ attendanceHistory, choirMembersList, isLoading, teams = 
   const [expandedId, setExpandedId] = useState(null);
   const [search, setSearch] = useState('');
 
+  const activeMembersList = useMemo(() => {
+    return (choirMembersList || []).filter(m => !m.disabled);
+  }, [choirMembersList]);
+
   const membersWithStats = useMemo(() => {
-    if (!choirMembersList || !attendanceHistory) return [];
-    return [...choirMembersList]
+    if (!activeMembersList.length || !attendanceHistory) return [];
+    return [...activeMembersList]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map(member => ({
         member,
         stats: computeStats(member, attendanceHistory, teams),
       }));
-  }, [choirMembersList, attendanceHistory, teams]);
+  }, [activeMembersList, attendanceHistory, teams]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return membersWithStats;
@@ -783,7 +787,7 @@ function MemberReport({ attendanceHistory, choirMembersList, isLoading, teams = 
     <div>
       <PageHeader
         title="Member Reports"
-        subtitle={`Attendance overview for all ${choirMembersList.length} members — click to expand details.`}
+        subtitle={`Attendance overview for all ${activeMembersList.length} active members — click to expand details.`}
       />
 
       {/* Search */}

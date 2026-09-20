@@ -670,23 +670,20 @@ function Schedule({
                                         <h5 className="font-bold text-slate-800 dark:text-white mb-2 text-sm font-heading">Team Members</h5>
                                         {(() => {
                                             const team = teams.find(t => t.id === showEventDetails.teamId);
-                                            if (!team || !team.members || team.members.length === 0) {
+                                            const activeMembers = team && team.members ? team.members.map(memberId => memberMap.get(memberId)).filter(m => m && !m.disabled) : [];
+                                            if (activeMembers.length === 0) {
                                                 return <div className="text-xs text-slate-400 italic">No members assigned to this team.</div>;
                                             }
                                             return (
                                                 <div className="flex flex-wrap gap-2">
-                                                    {team.members.map(memberId => {
-                                                        const member = memberMap.get(memberId);
-                                                        if (!member) return null;
-                                                        return (
-                                                            <div key={memberId} className="flex items-center gap-1.5 bg-slate-100 dark:bg-navy-700 px-2.5 py-1 rounded-md">
-                                                                <div className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold outline outline-1 outline-white dark:outline-navy-800 ${member.gender === 'Female' ? 'bg-amber-500' : 'bg-sky-500'}`}>
-                                                                    {member.name.charAt(0)}
-                                                                </div>
-                                                                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{member.name}</span>
+                                                    {activeMembers.map(member => (
+                                                        <div key={member.id} className="flex items-center gap-1.5 bg-slate-100 dark:bg-navy-700 px-2.5 py-1 rounded-md">
+                                                            <div className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold outline outline-1 outline-white dark:outline-navy-800 ${member.gender === 'Female' ? 'bg-amber-500' : 'bg-sky-500'}`}>
+                                                                {member.name.charAt(0)}
                                                             </div>
-                                                        );
-                                                    })}
+                                                            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{member.name}</span>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             );
                                         })()}

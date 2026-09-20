@@ -95,6 +95,7 @@ const notifyTeam = async (teamId, title, body, excludeIds = []) => {
             for (const doc of membersSnapshot.docs) {
                 if (excludeIds.includes(doc.id)) continue;
                 const memberData = doc.data();
+                if (memberData.disabled) continue;
                 if (memberData.fcmToken) {
                     await sendPushNotification(memberData.fcmToken, title, body);
                 }
@@ -108,8 +109,11 @@ const notifyTeam = async (teamId, title, body, excludeIds = []) => {
             for (const memberId of memberIds) {
                 if (excludeIds.includes(memberId)) continue;
                 const memberDoc = await db.collection('choirMembers').doc(memberId).get();
-                if (memberDoc.exists && memberDoc.data().fcmToken) {
-                    await sendPushNotification(memberDoc.data().fcmToken, title, body);
+                if (memberDoc.exists) {
+                    const memberData = memberDoc.data();
+                    if (!memberData.disabled && memberData.fcmToken) {
+                        await sendPushNotification(memberData.fcmToken, title, body);
+                    }
                 }
             }
         }
@@ -148,6 +152,7 @@ cron.schedule('30 3 * * *', async () => {
 
         for (const doc of membersSnapshot.docs) {
             const data = doc.data();
+            if (data.disabled) continue;
             const fcmToken = data.fcmToken;
             const memberId = doc.id;
 
@@ -310,6 +315,7 @@ cron.schedule('0 10 1 * *', async () => {
         const membersSnapshot = await db.collection('choirMembers').get();
         for (const doc of membersSnapshot.docs) {
             const user = doc.data();
+            if (user.disabled) continue;
             if (user.fcmToken && memberStats[doc.id]) {
                 const stats = memberStats[doc.id];
                 if (stats.totalCount > 0) {

@@ -63,6 +63,22 @@ function MemberForm({ member, onSave, onCancel, isViewOnly }) {
           <label className="form-label">Anbiyam</label>
           <input type="text" name="anbiyam" value={formData.anbiyam || ''} onChange={handleChange} disabled={isViewOnly} className="form-input" />
         </div>
+        <div>
+          <label className="form-label">Member Status</label>
+          <select
+            name="disabled"
+            value={formData.disabled ? 'disabled' : 'active'}
+            onChange={(e) => setFormData(prev => ({ ...prev, disabled: e.target.value === 'disabled' }))}
+            disabled={isViewOnly || (member && (member.role === 'admin' || member.email === 'fathimatamilchoir@gmail.com'))}
+            className="form-select"
+          >
+            <option value="active">Active</option>
+            <option value="disabled">Disabled</option>
+          </select>
+          {member && (member.role === 'admin' || member.email === 'fathimatamilchoir@gmail.com') && (
+            <p className="text-xs text-slate-400 mt-1">Admin accounts cannot be disabled.</p>
+          )}
+        </div>
       </div>
       <div>
         <label className="form-label">Address</label>

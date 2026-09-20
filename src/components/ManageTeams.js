@@ -28,7 +28,7 @@ function ManageTeams({
   const getProcessedTeamsForType = useCallback((type) => {
     return teams.filter(team => team.type === type).map(team => ({
       ...team,
-      memberDetails: team.members.map(id => memberMap.get(id)).filter(Boolean).sort((a, b) => {
+      memberDetails: team.members.map(id => memberMap.get(id)).filter(m => m && !m.disabled).sort((a, b) => {
         if (a.isOrganist && !b.isOrganist) return -1;
         if (!a.isOrganist && b.isOrganist) return 1;
         if (a.gender === 'Female' && b.gender !== 'Female') return -1;
@@ -43,7 +43,7 @@ function ManageTeams({
 
   const getUnassignedMembersForType = useCallback((type) => {
     const assignedMemberIds = new Set(teams.filter(t => t.type === type).flatMap(t => t.members));
-    return choirMembersList.filter(m => !assignedMemberIds.has(m.id)).sort((a, b) => a.name.localeCompare(b.name));
+    return choirMembersList.filter(m => !m.disabled && !assignedMemberIds.has(m.id)).sort((a, b) => a.name.localeCompare(b.name));
   }, [teams, choirMembersList]);
 
   const unassignedSundayMembers = useMemo(() => getUnassignedMembersForType('sunday'), [getUnassignedMembersForType]);

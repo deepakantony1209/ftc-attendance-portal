@@ -47,13 +47,17 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
     return history;
   }, [attendanceHistory, selectedYear, selectedMonth]);
 
+  const activeMembersList = useMemo(() => {
+    return (choirMembersList || []).filter(m => !m.disabled);
+  }, [choirMembersList]);
+
   const { upcomingBirthdays, upcomingAnniversaries } = useMemo(() => {
-    if (!choirMembersList || choirMembersList.length === 0) return { upcomingBirthdays: [], upcomingAnniversaries: [] };
+    if (!activeMembersList || activeMembersList.length === 0) return { upcomingBirthdays: [], upcomingAnniversaries: [] };
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const next30Days = new Date(today); next30Days.setDate(today.getDate() + 30);
     const birthdays = []; const anniversaries = [];
 
-    choirMembersList.forEach(member => {
+    activeMembersList.forEach(member => {
       if (member.dob) {
         const dob = new Date(member.dob);
         const birthdayThisYear = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
@@ -76,15 +80,15 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
     birthdays.sort((a, b) => a.date - b.date);
     anniversaries.sort((a, b) => a.date - b.date);
     return { upcomingBirthdays: birthdays, upcomingAnniversaries: anniversaries };
-  }, [choirMembersList]);
+  }, [activeMembersList]);
 
   const dashboardData = useMemo(() => {
-    const defaultData = { totalMembers: choirMembersList ? choirMembersList.length : 0, averageAttendance: 0, totalEvents: 0, topPerformers: [], needsAttention: [], sortedMembers: [], menAttendance: 0, womenAttendance: 0 };
-    if (!filteredHistory || filteredHistory.length === 0 || !choirMembersList || choirMembersList.length === 0) return defaultData;
+    const defaultData = { totalMembers: activeMembersList ? activeMembersList.length : 0, averageAttendance: 0, totalEvents: 0, topPerformers: [], needsAttention: [], sortedMembers: [], menAttendance: 0, womenAttendance: 0 };
+    if (!filteredHistory || filteredHistory.length === 0 || !activeMembersList || activeMembersList.length === 0) return defaultData;
     const relevantHistory = filteredHistory.filter(event => event.records && event.records.length > 0);
-    if (relevantHistory.length === 0) return { ...defaultData, totalMembers: choirMembersList.length };
+    if (relevantHistory.length === 0) return { ...defaultData, totalMembers: activeMembersList.length };
 
-    const memberStats = (choirMembersList || []).map(member => {
+    const memberStats = activeMembersList.map(member => {
       let totalPointsAwarded = 0; let totalMaxPoints = 0;
       const excuseCountsByMonth = {};
       relevantHistory.forEach(event => {
@@ -124,14 +128,14 @@ function Dashboard({ user, attendanceHistory = [], choirMembersList = [], isLoad
     const sortedMembers = memberStats.sort((a, b) => b.totalPoints - a.totalPoints);
 
     return {
-      totalMembers: choirMembersList.length,
+      totalMembers: activeMembersList.length,
       averageAttendance: sortedMembers.length > 0 ? sortedMembers.reduce((sum, m) => sum + m.percentage, 0) / sortedMembers.length : 0,
       totalEvents: relevantHistory.length,
       topPerformers: sortedMembers.filter(m => m.percentage >= 80).slice(0, 10),
       needsAttention: sortedMembers.filter(m => m.percentage < 60).slice(0, 10),
       sortedMembers, menAttendance, womenAttendance,
     };
-  }, [filteredHistory, choirMembersList, teams]);
+  }, [filteredHistory, activeMembersList, teams]);
 
   const activityCounts = useMemo(() => {
     const counts = {};
